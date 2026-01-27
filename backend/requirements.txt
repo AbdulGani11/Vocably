@@ -1,0 +1,11 @@
+# Qwen3-TTS Backend Dependencies
+
+# Core TTS package (includes torch, transformers, etc.)
+qwen-tts
+
+# FastAPI server
+fastapi
+uvicorn[standard]
+
+# Audio processing
+soundfile
