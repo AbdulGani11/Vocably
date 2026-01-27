@@ -33,20 +33,30 @@ A React-based text-to-speech application powered by **Qwen3-TTS**, running entir
 * **Disk Space:** ~8GB (for model weights and dependencies)
 
 ### Quick Start
+
 1.  **Clone the repository:**
     ```bash
     git clone [https://github.com/AbdulGani11/Vocably.git](https://github.com/AbdulGani11/Vocably.git)
     cd Vocably
     ```
 
-2.  **Start the Application:**
+2.  **Configure Environment Variables:**
+    Create a new file named `.env` in the root directory (same level as `package.json`) and add the following line:
+    ```env
+    VITE_TTS_BACKEND_URL=http://localhost:8000
+    ```
+
+3.  **Start the Application:**
     Run the automated startup script:
     ```bash
     .\start.bat
     ```
-    *This will install Python dependencies, download the model (first run only), and launch both backend and frontend servers.*
+    > **Note:** On the first run, this script will automatically:
+    > * Create the local Python virtual environment (`backend/qwen_env`)
+    > * Download the 3.5GB model weights
+    > * Install all Node.js and Python dependencies
 
-3.  **Access the App:**
+4.  **Access the App:**
     * **UI:** `http://localhost:5173`
     * **API Docs:** `http://localhost:8000/docs`
 
