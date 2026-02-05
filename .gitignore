@@ -12,22 +12,15 @@ dist/
 # Logs
 *.log
 
-# Model files (large, downloaded at runtime)
-Qwen3-TTS/
-*.safetensors
-*.bin
-*.pt
-*.pth
-
-# Documentation (local only)
-TECH_STACK.md
-VOCABLY_GUIDE.md
-DEPLOYMENT.md
+# Local docs
 documentation.md
 Qwen3-TTS_Installation_Guide*
+TECH_STACK.md
+VOCABLY_GUIDE.md
 
 # Editor
 .vscode/
+.claude/
 
 # Python cache
 __pycache__/
