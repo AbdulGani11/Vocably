@@ -7,7 +7,6 @@ import Logo from "./Logo";
 const NAV_LINKS = [
   { label: "FEATURES", id: "features", Content: FeaturesContent },
   { label: "DOCS", id: "docs", Content: DocsContent },
-  { label: "PRICING", href: "#", isLink: true },
   { label: "ABOUT", id: "about", Content: AboutContent },
 ];
 
@@ -38,27 +37,11 @@ const Navbar = () => {
 
         {/* 2. CENTER: Navigation Links (Absolute Center) */}
         <div className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center gap-6 z-10">
-          {NAV_LINKS.map((item) =>
-            item.isLink ? (
-              <a key={item.label} href={item.href} className="nav-link">
-                {item.label}
-              </a>
-            ) : (
-              <FlyoutLink
-                key={item.label}
-                href="#"
-                FlyoutContent={item.Content}
-              >
-                {item.label}
-              </FlyoutLink>
-            ),
-          )}
-        </div>
-
-        {/* 3. RIGHT: CTA Buttons */}
-        <div className="hidden lg:flex items-center gap-3 z-20">
-          <button className="btn-secondary">Get Started</button>
-          <button className="btn-primary">Sign In</button>
+          {NAV_LINKS.map((item) => (
+            <FlyoutLink key={item.label} FlyoutContent={item.Content}>
+              {item.label}
+            </FlyoutLink>
+          ))}
         </div>
 
         {/* Mobile Menu Icon */}
@@ -94,47 +77,32 @@ const Navbar = () => {
         {/* Navigation Links - Accordion Style */}
         <div className="flex-1 overflow-y-auto px-6 py-6 min-h-0">
           <div className="flex flex-col gap-0">
-            {NAV_LINKS.map((item) =>
-              item.isLink ? (
-                <a
-                  key={item.label}
-                  href={item.href}
-                  className="border-b border-neutral-100 py-4 text-base font-medium uppercase tracking-wide text-neutral-800 hover:text-neutral-600"
+            {NAV_LINKS.map((item) => (
+              <div key={item.label} className="border-b border-neutral-100">
+                <button
+                  onClick={() => toggleSection(item.id)}
+                  className="w-full flex items-center justify-between py-4 text-left"
                 >
-                  {item.label}
-                </a>
-              ) : (
-                <div key={item.label} className="border-b border-neutral-100">
-                  <button
-                    onClick={() => toggleSection(item.id)}
-                    className="w-full flex items-center justify-between py-4 text-left"
-                  >
-                    <span className="text-base font-medium uppercase tracking-wide text-neutral-800">
-                      {item.label}
-                    </span>
-                    <i
-                      className={`ri-arrow-right-s-line text-xl text-neutral-400 transition-transform duration-300 ${expandedSection === item.id ? "rotate-90" : ""}`}
-                    ></i>
-                  </button>
+                  <span className="text-base font-medium uppercase tracking-wide text-neutral-800">
+                    {item.label}
+                  </span>
+                  <i
+                    className={`ri-arrow-right-s-line text-xl text-neutral-400 transition-transform duration-300 ${expandedSection === item.id ? "rotate-90" : ""}`}
+                  ></i>
+                </button>
 
-                  {/* Native CSS Accordion using grid-template-rows trick */}
-                  <div
-                    className={`accordion-grid ${expandedSection === item.id ? "open" : ""}`}
-                  >
-                    <div className="accordion-inner">
-                      <item.Content />
-                    </div>
+                <div
+                  className={`accordion-grid ${expandedSection === item.id ? "open" : ""}`}
+                >
+                  <div className="accordion-inner">
+                    <item.Content />
                   </div>
                 </div>
-              ),
-            )}
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Bottom CTA Button */}
-        <div className="px-6 py-6 border-t border-neutral-100">
-          <button className="w-full btn-primary py-3 text-sm">Sign In</button>
-        </div>
       </div>
     </nav>
   );

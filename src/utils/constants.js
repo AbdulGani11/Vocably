@@ -2,18 +2,9 @@ export const MAX_TEXT_LENGTH = 3000;
 export const WARNING_THRESHOLD = 2700;
 
 // Qwen3-TTS CustomVoice Speakers
-// These are the pre-defined voices available in the 0.6B and 1.7B CustomVoice models
 export const VOICES = [
-    { name: "Vivian", voiceId: "vivian", label: "Vivian", engines: ["standard", "premium"] },
-    { name: "Ryan", voiceId: "ryan", label: "Ryan", engines: ["standard", "premium"] },
-    { name: "Elena", voiceId: "elena", label: "Elena", engines: ["standard", "premium"] },
-    { name: "Lucas", voiceId: "lucas", label: "Lucas", engines: ["standard", "premium"] },
-    { name: "Isabella", voiceId: "isabella", label: "Isabella", engines: ["standard", "premium"] },
-    { name: "Marcus", voiceId: "marcus", label: "Marcus", engines: ["standard", "premium"] },
-    { name: "Aria", voiceId: "aria", label: "Aria", engines: ["standard", "premium"] },
-    { name: "Daniel", voiceId: "daniel", label: "Daniel", engines: ["standard", "premium"] },
-    { name: "Sophie", voiceId: "sophie", label: "Sophie", engines: ["standard", "premium"] },
-    { name: "Nathan", voiceId: "nathan", label: "Nathan", engines: ["standard", "premium"] },
+    "Vivian", "Ryan", "Elena", "Lucas", "Isabella",
+    "Marcus", "Aria", "Daniel", "Sophie", "Nathan",
 ];
 
 // Tone/Style Presets for instruction-based voice control
@@ -26,6 +17,38 @@ export const TONE_PRESETS = [
     { id: "news", label: "News", icon: "ri-newspaper-line", instruction: "Speak like a professional news anchor" },
     { id: "calm", label: "Calm", icon: "ri-mental-health-line", instruction: "Speak slowly, calmly, and peacefully" },
     { id: "dramatic", label: "Dramatic", icon: "ri-movie-2-line", instruction: "Speak with dramatic flair and intensity" },
+];
+
+// Use case badges — clickable demos in the headline area
+export const USE_CASES = [
+    {
+        id: "podcasts",
+        label: "Podcasts",
+        icon: "ri-mic-line",
+        color: "text-purple-500",
+        text: "Welcome to the future of podcasting. In today's episode, we're diving into how artificial intelligence is reshaping the way creators produce audio content. Whether you're a solo voice or a full production team, the tools are finally catching up — and this is just the beginning.",
+    },
+    {
+        id: "youtube",
+        label: "YouTube",
+        icon: "ri-youtube-line",
+        color: "text-red-500",
+        text: "Hey everyone, welcome back to the channel! Today I'm showing you something that's going to change how you create content. No mic setup, no takes, no editing. Just type your script, hit play, and you've got a polished voiceover in seconds. Links are down in the description — let's get into it.",
+    },
+    {
+        id: "audiobooks",
+        label: "Audiobooks",
+        icon: "ri-book-2-line",
+        color: "text-amber-600",
+        text: "Chapter One. The old library stood at the edge of town, its wooden doors creaking open like a whispered invitation. No one had visited in years — until the night a single light flickered behind the frosted glass. She stepped inside, and the dust caught the moonlight like a thousand tiny stars falling in slow motion.",
+    },
+    {
+        id: "presentations",
+        label: "Presentations",
+        icon: "ri-presentation-line",
+        color: "text-blue-500",
+        text: "Good morning, team. This quarter we saw a 34% increase in user engagement and a 22% reduction in churn. These results reflect the work every one of you has put in. Our roadmap for next quarter includes three major milestones — and based on where we stand today, I'm confident we'll exceed each one.",
+    },
 ];
 
 export const EXAMPLES = [

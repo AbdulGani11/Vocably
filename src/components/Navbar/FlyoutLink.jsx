@@ -4,7 +4,7 @@ import { useState } from "react";
  * FLYOUT LINK COMPONENT
  * Renders a navigation link with an animated dropdown menu.
  */
-const FlyoutLink = ({ children, href, FlyoutContent }) => {
+const FlyoutLink = ({ children, FlyoutContent }) => {
   // Track whether dropdown is currently open
   const [open, setOpen] = useState(false);
 
@@ -17,14 +17,14 @@ const FlyoutLink = ({ children, href, FlyoutContent }) => {
       onMouseLeave={() => setOpen(false)}
       className="relative w-fit h-fit"
     >
-      <a href={href} className="group flex items-center gap-1 nav-link">
+      <span className="group flex items-center gap-1 nav-link cursor-pointer">
         {children}
         <i
           className={`ri-arrow-down-s-line text-sm transition-transform duration-300 ${
             open ? "rotate-180" : "rotate-0"
           }`}
         ></i>
-      </a>
+      </span>
 
       {/* 
         Native CSS Transition approach:

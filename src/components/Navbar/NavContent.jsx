@@ -1,31 +1,23 @@
+// Shared color map — full static class strings so Tailwind can detect them
+const COLOR_MAP = {
+  purple: { bg: "bg-purple-50 hover:bg-purple-100", icon: "text-purple-600" },
+  blue:   { bg: "bg-blue-50 hover:bg-blue-100",     icon: "text-blue-600" },
+  green:  { bg: "bg-green-50 hover:bg-green-100",   icon: "text-green-600" },
+  orange: { bg: "bg-orange-50 hover:bg-orange-100", icon: "text-orange-600" },
+};
+const DEFAULT_COLOR = { bg: "bg-neutral-50 hover:bg-neutral-100", icon: "text-neutral-600" };
+
 /**
  * REUSABLE FEATURE CARD COMPONENT
  * Used across FeaturesContent, DocsContent, and AboutContent
  */
-const FeatureCard = ({
-  icon,
-  color,
-  title,
-  description,
-  features,
-  children,
-}) => {
-  const colorClasses = {
-    purple: "bg-purple-50 hover:bg-purple-100 text-purple-600",
-    blue: "bg-blue-50 hover:bg-blue-100 text-blue-600",
-    green: "bg-green-50 hover:bg-green-100 text-green-600",
-    orange: "bg-orange-50 hover:bg-orange-100 text-orange-600",
-  };
-
-  const [bgHover, iconColor] = colorClasses[color]?.split(" text-") || [
-    "bg-neutral-50 hover:bg-neutral-100",
-    "neutral-600",
-  ];
+const FeatureCard = ({ icon, color, title, description, features, children }) => {
+  const { bg, icon: iconColor } = COLOR_MAP[color] || DEFAULT_COLOR;
 
   return (
-    <div className={`card-feature ${bgHover}`}>
+    <div className={`card-feature ${bg}`}>
       <div className="text-heading">
-        <i className={`${icon} text-${iconColor}`}></i> {title}
+        <i className={`${icon} ${iconColor}`}></i> {title}
       </div>
       {description && <p className="feature-card-desc">{description}</p>}
       {features && (
@@ -41,25 +33,15 @@ const FeatureCard = ({
 };
 
 /**
- * ABOUT CARD VARIANT - Different layout with icon on left
+ * ABOUT CARD VARIANT - Icon on left, compact layout
  */
 const AboutCard = ({ icon, color, title, description }) => {
-  const colorClasses = {
-    purple: "bg-purple-50 hover:bg-purple-100 text-purple-600",
-    blue: "bg-blue-50 hover:bg-blue-100 text-blue-600",
-    green: "bg-green-50 hover:bg-green-100 text-green-600",
-    orange: "bg-orange-50 hover:bg-orange-100 text-orange-600",
-  };
-
-  const [bgHover, iconColor] = colorClasses[color]?.split(" text-") || [
-    "bg-neutral-50 hover:bg-neutral-100",
-    "neutral-600",
-  ];
+  const { bg, icon: iconColor } = COLOR_MAP[color] || DEFAULT_COLOR;
 
   return (
-    <div className={`card-feature ${bgHover}`}>
+    <div className={`card-feature ${bg}`}>
       <div className="flex items-start gap-2 mb-1">
-        <i className={`${icon} text-${iconColor} text-base mt-0.5`}></i>
+        <i className={`${icon} ${iconColor} text-base mt-0.5`}></i>
         <div>
           <div className="text-sm font-semibold text-neutral-800">{title}</div>
           <p className="text-[10px] text-neutral-600 mt-0.5">{description}</p>
@@ -74,7 +56,7 @@ const AboutCard = ({ icon, color, title, description }) => {
  */
 export const FeaturesContent = () => {
   return (
-    <div className="w-100 p-3 text-left">
+    <div className="w-full p-3 text-left">
       <h3 className="mb-3 text-label pl-2">Core Features</h3>
 
       <div className="flex flex-col gap-2">
@@ -84,20 +66,20 @@ export const FeaturesContent = () => {
           title="Natural Voice Synthesis"
           description="Transform text to lifelike speech in seconds"
           features={[
-            "Choose from 9 premium voices",
+            "Choose from 10 voices",
             "Multiple accents and genders",
             "Instant generation in browser",
           ]}
         />
 
         <FeatureCard
-          icon="ri-flashlight-line"
+          icon="ri-shield-line"
           color="blue"
-          title="Zero Setup Required"
-          description="Start creating instantly, no installation needed"
+          title="Local & Private"
+          description="Everything runs on your machine"
           features={[
-            "Works directly in your browser",
-            "No API keys or registration",
+            "No cloud uploads or tracking",
+            "No API keys or subscriptions",
             "Completely free to use",
           ]}
         />
@@ -108,7 +90,7 @@ export const FeaturesContent = () => {
           title="Download & Export"
           description="Save audio files for any project"
           features={[
-            "High-quality MP3 format",
+            "High-quality WAV format",
             "Unlimited downloads",
             "Commercial use allowed",
           ]}
@@ -123,49 +105,45 @@ export const FeaturesContent = () => {
  */
 export const DocsContent = () => {
   return (
-    <div className="w-100 p-3 text-left">
+    <div className="w-full p-3 text-left">
       <h3 className="mb-3 text-label pl-2">Technical Documentation</h3>
 
       <div className="flex flex-col gap-2">
         <FeatureCard
           icon="ri-cpu-line"
           color="blue"
-          title="Neural Engine"
-          description="High-quality, versatile text-to-speech"
+          title="Qwen3-TTS 1.7B Model"
+          description="High-quality local AI voice synthesis"
           features={[
-            "Supports all 9 voices",
-            "Best for general-purpose TTS",
-            "Consistent quality across content types",
+            "10 voices available",
+            "Tone control via instructions",
+            "Runs entirely on your machine",
           ]}
         />
 
         <FeatureCard
-          icon="ri-sparkling-line"
+          icon="ri-mic-line"
           color="purple"
-          title="Generative Engine"
-          description="Most human-like AI voice synthesis"
-          features={[
-            "Supports 4 premium voices",
-            "Advanced context awareness",
-            "Superior emotional expression",
-          ]}
-        />
-
-        <FeatureCard
-          icon="ri-list-check"
-          color="green"
-          title="Voice Compatibility"
-          description="Engine-specific voice availability"
+          title="Available Voices"
+          description="Natural-sounding voices for any use case"
         >
           <div className="feature-card-list">
-            <div>
-              • <strong>Both:</strong> Joanna, Matthew, Amy, Brian
-            </div>
-            <div>
-              • <strong>Neural Only:</strong> Ivy, Joey, Kendra, Kimberly, Salli
-            </div>
+            <div>• <strong>Female:</strong> Vivian, Elena, Isabella, Aria, Sophie</div>
+            <div>• <strong>Male:</strong> Ryan, Lucas, Marcus, Daniel, Nathan</div>
           </div>
         </FeatureCard>
+
+        <FeatureCard
+          icon="ri-emotion-happy-line"
+          color="green"
+          title="Tone Control"
+          description="Adjust voice emotion and style"
+          features={[
+            "8 preset tones available",
+            "Excited, Sad, Whisper, Calm...",
+            "Natural language instructions",
+          ]}
+        />
 
         <FeatureCard
           icon="ri-code-box-line"
@@ -199,7 +177,7 @@ export const DocsContent = () => {
  */
 export const AboutContent = () => {
   return (
-    <div className="w-100 p-3 text-left">
+    <div className="w-full p-3 text-left">
       <h3 className="mb-3 text-label pl-2">Perfect For</h3>
 
       <div className="flex flex-col gap-2">
@@ -228,7 +206,7 @@ export const AboutContent = () => {
           icon="ri-star-line"
           color="purple"
           title="Why Choose Vocably?"
-          description="Zero setup required with unlimited usage, commercial license, and better quality than browser TTS"
+          description="Runs locally with unlimited usage, no subscriptions, and better quality than browser TTS"
         />
       </div>
     </div>

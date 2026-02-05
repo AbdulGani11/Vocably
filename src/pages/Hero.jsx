@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { useTTS } from "../hooks/useTTS";
-import { MAX_TEXT_LENGTH, WARNING_THRESHOLD, TONE_PRESETS } from "../utils/constants";
-import VoiceSelector from "../components/Hero/VoiceSelector";
-import EngineToggle from "../components/Hero/EngineToggle";
+import { MAX_TEXT_LENGTH, WARNING_THRESHOLD, VOICES, TONE_PRESETS, USE_CASES } from "../utils/constants";
+import DropupSelector from "../components/Hero/DropupSelector";
 import ExampleSelector from "../components/Hero/ExampleSelector";
+
+// Selector items — defined outside the component so they aren't recreated on every render
+const VOICE_ITEMS = VOICES.map((name) => ({ value: name, label: name }));
+const TONE_ITEMS = TONE_PRESETS.map((t) => ({ value: t.instruction, label: t.label, icon: t.icon }));
 
 const Hero = () => {
   const {
@@ -14,70 +17,65 @@ const Hero = () => {
     error,
     selectedVoice,
     setSelectedVoice,
-    engine,
-    setEngine,
     instruct,
     setInstruct,
     hasAudio,
     handlePlay,
     handleDownload,
-    availableVoices,
   } = useTTS();
 
-  // Track which example is currently selected
+  // Track which example or use case is selected
   const [selectedExample, setSelectedExample] = useState(null);
+  const [selectedUseCase, setSelectedUseCase] = useState(null);
 
   // Track textarea expanded state
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Handle example selection
+  // Handle example selection — clears use case highlight
   const handleSelectExample = (example) => {
     setText(example.text);
     setSelectedExample(example.id);
+    setSelectedUseCase(null);
+  };
+
+  // Handle use case badge click — clears example highlight
+  const handleSelectUseCase = (useCase) => {
+    setText(useCase.text);
+    setSelectedUseCase(useCase.id);
+    setSelectedExample(null);
   };
 
   return (
-    <section className="relative flex flex-col items-center justify-center w-full min-h-full max-w-5xl mx-auto px-6 md:px-6 pt-28 md:pt-20 pb-8 md:pb-4">
+    <section className="relative flex flex-col items-center justify-center w-full min-h-full max-w-5xl mx-auto px-6 pt-28 md:pt-20 pb-8 md:pb-4">
       {/* 1. CENTERED HEADLINE (THE PITCH) */}
       <div className="flex flex-col items-center justify-center w-full grow">
         <div className="text-center z-10 flex flex-col items-center mb-10 md:mb-8">
           <h1
-            className="mb-4 md:mb-4 text-3xl md:text-5xl lg:text-6xl font-medium leading-[1.1] tracking-tight text-neutral-900 animate-fade-in-up"
-            style={{ animationDelay: "0ms" }}
+            className="mb-4 text-3xl md:text-5xl lg:text-6xl font-medium leading-[1.1] tracking-tight text-neutral-900 animate-fade-in-up"
           >
-            {/* HEADLINE: Clear value proposition */}
             Transform Text to Voice, <br />
             <span className="text-neutral-500">Instantly.</span>
           </h1>
 
-          <p
-            className="mx-auto max-w-xl text-sm md:text-base text-neutral-600 leading-relaxed px-2 animate-fade-in-up"
-            style={{ animationDelay: "100ms" }}
-          >
-            {/* SUBHEAD: Emphasizes speed and quality */}
-            Experience real-time voice synthesis with natural-sounding results.
-            Generate high-quality speech from text with zero latency in your
-            browser.
-          </p>
-
-          {/* Use Case Badges */}
+          {/* Use Case Badges — click to load demo text */}
           <div
             className="flex flex-wrap items-center justify-center gap-2 mt-5 animate-fade-in-up"
-            style={{ animationDelay: "200ms" }}
+            style={{ animationDelay: "100ms" }}
           >
-            <span className="use-case-badge">
-              <i className="ri-mic-line text-purple-500"></i> Podcasts
-            </span>
-            <span className="use-case-badge">
-              <i className="ri-youtube-line text-red-500"></i> YouTube
-            </span>
-            <span className="use-case-badge">
-              <i className="ri-book-2-line text-amber-600"></i> Audiobooks
-            </span>
-            <span className="use-case-badge">
-              <i className="ri-presentation-line text-blue-500"></i>{" "}
-              Presentations
-            </span>
+            {USE_CASES.map((useCase) => (
+              <button
+                key={useCase.id}
+                onClick={() => handleSelectUseCase(useCase)}
+                className={`use-case-badge transition-all ${
+                  selectedUseCase === useCase.id
+                    ? "ring-2 ring-neutral-400 bg-neutral-100"
+                    : "hover:bg-neutral-50"
+                }`}
+              >
+                <i className={`${useCase.icon} ${useCase.color}`}></i>
+                {useCase.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -87,37 +85,24 @@ const Hero = () => {
           style={{ animationDelay: "300ms" }}
         >
           <div className="relative mx-auto w-full overflow-hidden rounded-2xl bg-white shadow-2xl shadow-orange-900/10 border border-white/60">
-            <div className="p-6 md:p-6">
-              {/* Header: Engine Toggles */}
-              <div className="mb-5 md:mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <EngineToggle engine={engine} setEngine={setEngine} />
+            <div className="p-6">
+              {/* Header: Expand toggle + badge */}
+              <div className="mb-5 md:mb-4 flex items-center justify-end gap-3">
+                <button
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className="flex items-center gap-1 text-[10px] md:text-xs font-medium text-neutral-400 hover:text-neutral-600 transition-colors"
+                  title={isExpanded ? "Collapse textarea" : "Expand textarea"}
+                  aria-label={isExpanded ? "Collapse textarea" : "Expand textarea"}
+                >
+                  <i className={isExpanded ? "ri-collapse-diagonal-line" : "ri-expand-diagonal-line"}></i>
+                  <span className="hidden sm:inline">
+                    {isExpanded ? "Collapse" : "Expand"}
+                  </span>
+                </button>
 
-                <div className="flex items-center gap-3">
-                  {/* Expand/Collapse Toggle */}
-                  <button
-                    onClick={() => setIsExpanded(!isExpanded)}
-                    className="flex items-center gap-1 text-[10px] md:text-xs font-medium text-neutral-400 hover:text-neutral-600 transition-colors"
-                    title={isExpanded ? "Collapse textarea" : "Expand textarea"}
-                    aria-label={
-                      isExpanded ? "Collapse textarea" : "Expand textarea"
-                    }
-                  >
-                    <i
-                      className={
-                        isExpanded
-                          ? "ri-collapse-diagonal-line"
-                          : "ri-expand-diagonal-line"
-                      }
-                    ></i>
-                    <span className="hidden sm:inline">
-                      {isExpanded ? "Collapse" : "Expand"}
-                    </span>
-                  </button>
-
-                  <div className="flex items-center gap-1 text-[10px] md:text-xs font-medium text-neutral-400">
-                    <i className="ri-flashlight-line text-xs"></i>
-                    <span>Instant Preview</span>
-                  </div>
+                <div className="flex items-center gap-1 text-[10px] md:text-xs font-medium text-neutral-400">
+                  <i className="ri-flashlight-line text-xs"></i>
+                  <span>Instant Preview</span>
                 </div>
               </div>
 
@@ -153,44 +138,25 @@ const Hero = () => {
                 />
               </div>
 
-              {/* Tone/Style Selector */}
-              <div className="mt-4 pt-4 border-t border-neutral-100">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-[10px] md:text-xs font-medium text-neutral-500 uppercase tracking-wide">
-                    Tone:
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {TONE_PRESETS.map((tone) => (
-                    <button
-                      key={tone.id}
-                      onClick={() => setInstruct(tone.instruction)}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                        instruct === tone.instruction
-                          ? "bg-neutral-900 text-white"
-                          : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
-                      }`}
-                    >
-                      <i className={`${tone.icon} text-sm`}></i>
-                      {tone.label}
-                    </button>
-                  ))}
-                </div>
-                {instruct && (
-                  <div className="mt-2 text-[10px] text-neutral-400 italic">
-                    Style: "{instruct}"
-                  </div>
-                )}
-              </div>
-
               {/* Footer Controls */}
-              <div className="mt-6 md:mt-6 flex items-center justify-between border-t border-neutral-100 pt-6 md:pt-6">
-                {/* Voice Selector */}
-                <VoiceSelector
-                  selectedVoice={selectedVoice}
-                  setSelectedVoice={setSelectedVoice}
-                  availableVoices={availableVoices}
-                />
+              <div className="mt-6 flex items-center justify-between border-t border-neutral-100 pt-6">
+                {/* Voice + Tone Selectors */}
+                <div className="flex items-center gap-2">
+                  <DropupSelector
+                    items={VOICE_ITEMS}
+                    selectedValue={selectedVoice}
+                    onChange={setSelectedVoice}
+                    label="Voice"
+                    triggerIcon="ri-mic-line"
+                  />
+                  <DropupSelector
+                    items={TONE_ITEMS}
+                    selectedValue={instruct}
+                    onChange={setInstruct}
+                    label="Tone"
+                    triggerIcon="ri-voice-recognition-line"
+                  />
+                </div>
 
                 {/* Action Buttons */}
                 <div className="flex items-center gap-2 md:gap-3">
@@ -201,7 +167,7 @@ const Hero = () => {
                     className={`flex h-11 w-11 md:h-12 md:w-12 items-center justify-center rounded-full transition-all active:scale-95
                       ${
                         hasAudio
-                          ? "bg-purple-50 text-white hover:bg-purple-600 shadow-lg"
+                          ? "bg-purple-600 text-white hover:bg-purple-700 shadow-lg"
                           : "bg-neutral-100 text-neutral-400 cursor-not-allowed"
                       }`}
                     title={hasAudio ? "Download audio" : "Generate audio first"}

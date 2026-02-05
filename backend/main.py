@@ -2,6 +2,7 @@
 # Run with: python main.py
 
 import io
+import os
 import base64
 import logging
 from typing import Optional
@@ -12,6 +13,9 @@ import soundfile as sf
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+# Use all available CPU cores for inference
+torch.set_num_threads(os.cpu_count())
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -67,9 +71,21 @@ def load_model():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load model on startup."""
+    """Load model on startup and run warmup."""
     logger.info("Starting Qwen3-TTS server...")
     load_model()
+
+    # Warmup: run a short generation so lazy model internals initialize now,
+    # rather than on the user's first request
+    logger.info("Running warmup generation...")
+    with torch.inference_mode():
+        tts_model.generate_custom_voice(
+            text="Hello.",
+            language="Auto",
+            speaker="Vivian",
+        )
+    logger.info("Warmup complete. Server is ready.")
+
     yield
     logger.info("Shutting down server...")
 
@@ -81,13 +97,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS for React frontend
+# CORS — localhost always allowed; deployed frontend added via env var
+ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+if os.environ.get("FRONTEND_URL"):
+    ALLOWED_ORIGINS.append(os.environ["FRONTEND_URL"])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
 
 
@@ -101,26 +121,13 @@ async def root():
     }
 
 
-@app.get("/api/voices")
-async def get_voices():
-    """Return available voices."""
-    return {
-        "voices": [
-            {"name": speaker, "id": speaker.lower()}
-            for speaker in AVAILABLE_SPEAKERS
-        ]
-    }
-
-
 @app.post("/api/tts", response_model=TTSResponse)
 async def text_to_speech(request: TTSRequest):
     """Generate speech from text."""
-    global tts_model
-
     if tts_model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
 
-    if not request.text or not request.text.strip():
+    if not request.text.strip():
         raise HTTPException(status_code=400, detail="Text is required")
 
     # Validate speaker
@@ -131,13 +138,14 @@ async def text_to_speech(request: TTSRequest):
     try:
         logger.info(f"Generating speech: '{request.text[:50]}...' with voice '{speaker}'")
 
-        # Generate audio
-        wavs, sr = tts_model.generate_custom_voice(
-            text=request.text.strip(),
-            language=request.language,
-            speaker=speaker,
-            instruct=request.instruct if request.instruct else None,
-        )
+        # Generate audio (inference_mode disables gradient tracking overhead)
+        with torch.inference_mode():
+            wavs, sr = tts_model.generate_custom_voice(
+                text=request.text.strip(),
+                language=request.language,
+                speaker=speaker,
+                instruct=request.instruct or None,
+            )
 
         # Convert to WAV bytes
         audio_buffer = io.BytesIO()
@@ -171,4 +179,4 @@ if __name__ == "__main__":
     print("\n  Press Ctrl+C to stop the server")
     print("="*60 + "\n")
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000)
