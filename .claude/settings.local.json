@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(\"c:\\\\Users\\\\alveera\\\\Desktop\\\\CSS\\\\Vocably\\\\backend\\\\qwen_env\\\\Scripts\\\\python.exe\" -m pip freeze)",
-      "Bash(findstr:*)",
-      "Bash(\"c:\\\\Users\\\\alveera\\\\Desktop\\\\CSS\\\\Vocably\\\\backend\\\\qwen_env\\\\Scripts\\\\pip.exe\" freeze)"
-    ]
-  }
-}
