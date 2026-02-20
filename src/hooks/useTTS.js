@@ -53,11 +53,16 @@ export const useTTS = () => {
         setError(null);
 
         try {
-            // Call FastAPI backend
+            // Read JWT from sessionStorage — set during login
+            const token = sessionStorage.getItem("vocably_token");
+
+            // Call FastAPI backend (JWT required by the server)
             const response = await fetch(`${TTS_BACKEND_URL}/api/tts`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
+                    // Attach Bearer token — server returns 401 if missing or invalid
+                    ...(token ? { "Authorization": `Bearer ${token}` } : {}),
                 },
                 body: JSON.stringify({
                     text: text.trim(),
@@ -69,6 +74,10 @@ export const useTTS = () => {
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
+                // 401 means the token is missing, expired, or tampered with
+                if (response.status === 401) {
+                    throw new Error("Session expired. Please log in again.");
+                }
                 throw new Error(errorData.detail || `Server error: ${response.status}`);
             }
 

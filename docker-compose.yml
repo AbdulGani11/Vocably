@@ -1,0 +1,40 @@
+# docker-compose.yml — Vocably Backend
+#
+# Runs the FastAPI backend as a containerized service.
+# The React frontend is served separately (npm run dev locally,
+# or a static host like Render in production).
+#
+# Usage:
+#   docker-compose up --build      # First run (builds image)
+#   docker-compose up              # Subsequent runs (uses cached image)
+#   docker-compose down            # Stop and remove containers
+
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: vocably-backend
+    ports:
+      # Map container port 8000 to host port 8000 (PORT env var overrides Dockerfile default of 7860)
+      - "8000:8000"
+    environment:
+      # Set PORT=8000 locally (Dockerfile default is 7860 for HF Spaces)
+      - PORT=8000
+      # JWT secret — override this in production with a strong random value
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-me-in-production}
+      # Allow the local React dev server to call the API
+      - FRONTEND_URL=http://localhost:5173
+      # Optional: override default login credentials
+      # - VOCABLY_USERNAME=vocably
+      # - VOCABLY_PASSWORD=vocably2026
+    volumes:
+      # HF cache path uses non-root user home (/home/user) — matches Dockerfile USER directive
+      - huggingface_cache:/home/user/.cache/huggingface
+    restart: unless-stopped
+
+# Named volume: persists the downloaded model across container restarts
+volumes:
+  huggingface_cache:

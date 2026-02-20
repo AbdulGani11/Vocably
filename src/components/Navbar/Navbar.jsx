@@ -12,8 +12,9 @@ const NAV_LINKS = [
 
 /**
  * NAVBAR COMPONENT
+ * onLogout — optional callback; when provided a logout button is shown
  */
-const Navbar = () => {
+const Navbar = ({ onLogout }) => {
   // Track whether mobile menu is open
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   // Track which accordion section is expanded
@@ -43,6 +44,19 @@ const Navbar = () => {
             </FlyoutLink>
           ))}
         </div>
+
+        {/* 3. RIGHT: Logout Button (shown only after login) */}
+        {onLogout && (
+          <button
+            onClick={onLogout}
+            className="hidden lg:flex items-center gap-1.5 text-xs font-medium text-neutral-400 hover:text-neutral-700 transition-colors"
+            aria-label="Log out"
+            title="Log out"
+          >
+            <i className="ri-logout-box-r-line text-sm" />
+            <span>Log out</span>
+          </button>
+        )}
 
         {/* Mobile Menu Icon */}
         <button
@@ -102,7 +116,6 @@ const Navbar = () => {
             ))}
           </div>
         </div>
-
       </div>
     </nav>
   );

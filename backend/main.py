@@ -10,9 +10,11 @@ from contextlib import asynccontextmanager
 
 import torch
 import soundfile as sf
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+from auth import create_access_token, validate_credentials, verify_token
 
 # Use all available CPU cores for inference
 torch.set_num_threads(os.cpu_count())
@@ -31,6 +33,15 @@ AVAILABLE_SPEAKERS = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Pydantic models
+# ---------------------------------------------------------------------------
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
 class TTSRequest(BaseModel):
     text: str
     voice: str = "Vivian"
@@ -43,6 +54,10 @@ class TTSResponse(BaseModel):
     sample_rate: int
     format: str = "wav"
 
+
+# ---------------------------------------------------------------------------
+# Model loading
+# ---------------------------------------------------------------------------
 
 def load_model():
     """Load Qwen3-TTS model."""
@@ -90,14 +105,19 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down server...")
 
 
+# ---------------------------------------------------------------------------
+# App setup
+# ---------------------------------------------------------------------------
+
 app = FastAPI(
     title="Vocably TTS API",
-    description="Qwen3-TTS backend for Vocably",
-    version="1.0.0",
+    description="Qwen3-TTS backend for Vocably — secured with JWT authentication",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
 # CORS — localhost always allowed; deployed frontend added via env var
+# Authorization header is required for authenticated endpoints
 ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
 if os.environ.get("FRONTEND_URL"):
     ALLOWED_ORIGINS.append(os.environ["FRONTEND_URL"])
@@ -107,25 +127,71 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization"],  # Authorization required for JWT
 )
 
 
+# ---------------------------------------------------------------------------
+# Public endpoints (no auth required)
+# ---------------------------------------------------------------------------
+
 @app.get("/")
 async def root():
-    """Health check endpoint."""
+    """Root health check — publicly accessible."""
     return {
         "status": "ok",
         "model": "Qwen3-TTS-12Hz-1.7B-CustomVoice",
         "speakers": AVAILABLE_SPEAKERS,
+        "auth": "JWT required for /api/tts",
     }
 
 
+@app.get("/health")
+async def health():
+    """Standard health check endpoint."""
+    return {
+        "status": "ok" if tts_model is not None else "loading",
+        "model_loaded": tts_model is not None,
+    }
+
+
+@app.post("/login")
+async def login(request: LoginRequest):
+    """
+    Authenticate with username + password.
+    Returns a signed JWT on success.
+
+    Default credentials (local demo):
+      username: vocably
+      password: vocably2026
+    Override via VOCABLY_USERNAME / VOCABLY_PASSWORD environment variables.
+    """
+    if not validate_credentials(request.username, request.password):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid username or password.",
+        )
+
+    token = create_access_token(data={"sub": request.username})
+    logger.info(f"User '{request.username}' logged in successfully.")
+    return {"access_token": token, "token_type": "bearer"}
+
+
+# ---------------------------------------------------------------------------
+# Protected endpoints (JWT required)
+# ---------------------------------------------------------------------------
+
 @app.post("/api/tts", response_model=TTSResponse)
-async def text_to_speech(request: TTSRequest):
-    """Generate speech from text."""
+async def text_to_speech(
+    request: TTSRequest,
+    token_data: dict = Depends(verify_token),  # 401 if token missing or invalid
+):
+    """
+    Generate speech from text.
+    Requires a valid Bearer JWT in the Authorization header.
+    """
     if tts_model is None:
-        raise HTTPException(status_code=503, detail="Model not loaded")
+        raise HTTPException(status_code=503, detail="Model not loaded yet. Please wait and try again.")
 
     if not request.text.strip():
         raise HTTPException(status_code=400, detail="Text is required")
@@ -136,7 +202,10 @@ async def text_to_speech(request: TTSRequest):
         speaker = "Vivian"  # Default fallback
 
     try:
-        logger.info(f"Generating speech: '{request.text[:50]}...' with voice '{speaker}'")
+        logger.info(
+            f"[{token_data['username']}] Generating speech: "
+            f"'{request.text[:50]}...' with voice '{speaker}'"
+        )
 
         # Generate audio (inference_mode disables gradient tracking overhead)
         with torch.inference_mode():
@@ -152,7 +221,7 @@ async def text_to_speech(request: TTSRequest):
         sf.write(audio_buffer, wavs[0], sr, format="WAV")
         audio_buffer.seek(0)
 
-        # Encode as base64
+        # Encode as base64 for JSON transport
         audio_base64 = base64.b64encode(audio_buffer.read()).decode("utf-8")
 
         logger.info(f"Generated {len(wavs[0]) / sr:.2f}s of audio")
@@ -168,14 +237,21 @@ async def text_to_speech(request: TTSRequest):
         raise HTTPException(status_code=500, detail="Failed to generate speech. Please try again.")
 
 
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
 if __name__ == "__main__":
     import uvicorn
 
     print("\n" + "="*60)
-    print("  Vocably TTS Server (Qwen3-TTS)")
+    print("  Vocably TTS Server (Qwen3-TTS) — v2.0")
     print("="*60)
     print("\n  Starting server on http://localhost:8000")
     print("  API docs available at http://localhost:8000/docs")
+    print("  Login endpoint:     POST http://localhost:8000/login")
+    print("  TTS endpoint:       POST http://localhost:8000/api/tts  [JWT required]")
+    print("\n  Default credentials: vocably / vocably2026")
     print("\n  Press Ctrl+C to stop the server")
     print("="*60 + "\n")
 

@@ -1,0 +1,27 @@
+# .dockerignore
+# Files and directories excluded from the Docker build context.
+# Keeping the build context small makes builds faster.
+
+# Python virtual environment — never copy into the image;
+# pip installs from requirements.txt inside the container instead
+qwen_env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Git metadata — not needed at runtime
+.git/
+.gitignore
+
+# Environment files — secrets must be injected via env vars or docker-compose,
+# never baked into the image
+.env
+.env.*
+
+# Node.js (frontend lives outside backend/, but just in case)
+node_modules/
+
+# Documentation
+*.md
