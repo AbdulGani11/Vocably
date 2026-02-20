@@ -56,7 +56,7 @@ VITE_TTS_BACKEND_URL=http://localhost:8000
 .\start.bat      # starts backend + frontend together
 ```
 
-Open http://localhost:5173
+Open [http://localhost:5173](http://localhost:5173)
 
 ## Docker (Backend)
 
