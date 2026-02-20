@@ -12,11 +12,11 @@ dist/
 # Logs
 *.log
 
-# Local docs
-documentation.md
+# Local-only docs (not for GitHub)
 Qwen3-TTS_Installation_Guide*
 TECH_STACK.md
 VOCABLY_GUIDE.md
+Untitled*.md
 
 # Editor
 .vscode/

@@ -6,10 +6,10 @@ Full-stack text-to-speech web application — FastAPI backend deployed on Huggin
 
 | Layer           | URL                                                   |
 | --------------- | ----------------------------------------------------- |
+| **Frontend**    | https://vocably.onrender.com                          |
 | **Backend API** | https://gilfoyle99213-vocably-backend.hf.space        |
 | **API Health**  | https://gilfoyle99213-vocably-backend.hf.space/health |
 | **API Docs**    | https://gilfoyle99213-vocably-backend.hf.space/docs   |
-| **Frontend**    | _(Render — deploying)_                                |
 
 ## Tech Stack
 
