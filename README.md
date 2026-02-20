@@ -56,20 +56,6 @@ VITE_TTS_BACKEND_URL=http://localhost:8000
 .\start.bat      # starts backend + frontend together
 ```
 
-**Linux / macOS:**
-
-```bash
-# Terminal 1 — backend
-cd backend
-python -m venv qwen_env && source qwen_env/bin/activate
-pip install -r requirements.txt
-python main.py
-
-# Terminal 2 — frontend
-npm install
-npm run dev
-```
-
 Open http://localhost:5173
 
 ## Docker (Backend)
