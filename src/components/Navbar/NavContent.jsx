@@ -1,17 +1,26 @@
 // Shared color map — full static class strings so Tailwind can detect them
 const COLOR_MAP = {
   purple: { bg: "bg-purple-50 hover:bg-purple-100", icon: "text-purple-600" },
-  blue:   { bg: "bg-blue-50 hover:bg-blue-100",     icon: "text-blue-600" },
-  green:  { bg: "bg-green-50 hover:bg-green-100",   icon: "text-green-600" },
+  blue: { bg: "bg-blue-50 hover:bg-blue-100", icon: "text-blue-600" },
+  green: { bg: "bg-green-50 hover:bg-green-100", icon: "text-green-600" },
   orange: { bg: "bg-orange-50 hover:bg-orange-100", icon: "text-orange-600" },
 };
-const DEFAULT_COLOR = { bg: "bg-neutral-50 hover:bg-neutral-100", icon: "text-neutral-600" };
+const DEFAULT_COLOR = {
+  bg: "bg-neutral-50 hover:bg-neutral-100",
+  icon: "text-neutral-600",
+};
 
 /**
  * REUSABLE FEATURE CARD COMPONENT
- * Used across FeaturesContent, DocsContent, and AboutContent
  */
-const FeatureCard = ({ icon, color, title, description, features, children }) => {
+const FeatureCard = ({
+  icon,
+  color,
+  title,
+  description,
+  features,
+  children,
+}) => {
   const { bg, icon: iconColor } = COLOR_MAP[color] || DEFAULT_COLOR;
 
   return (
@@ -64,35 +73,35 @@ export const FeaturesContent = () => {
           icon="ri-mic-line"
           color="purple"
           title="Natural Voice Synthesis"
-          description="Transform text to lifelike speech in seconds"
+          description="Transform text to lifelike speech"
           features={[
-            "Choose from 10 voices",
-            "Multiple accents and genders",
-            "Instant generation in browser",
+            "10 voices — male and female",
+            "Tone control via natural language",
+            "Downloads as WAV audio",
           ]}
         />
 
         <FeatureCard
           icon="ri-shield-line"
           color="blue"
-          title="Local & Private"
-          description="Everything runs on your machine"
+          title="JWT Authenticated API"
+          description="Secure access to TTS endpoint"
           features={[
-            "No cloud uploads or tracking",
-            "No API keys or subscriptions",
-            "Completely free to use",
+            "HS256 signed Bearer tokens",
+            "Session-scoped storage",
+            "401 on unauthenticated requests",
           ]}
         />
 
         <FeatureCard
-          icon="ri-download-2-line"
+          icon="ri-cloud-line"
           color="green"
-          title="Download & Export"
-          description="Save audio files for any project"
+          title="Local & Cloud Deployment"
+          description="Run anywhere — local machine or cloud"
           features={[
-            "High-quality WAV format",
-            "Unlimited downloads",
-            "Commercial use allowed",
+            "Local: start.bat, no Docker needed",
+            "Cloud: Render + Hugging Face Spaces",
+            "Docker containerized backend",
           ]}
         />
       </div>
@@ -113,11 +122,11 @@ export const DocsContent = () => {
           icon="ri-cpu-line"
           color="blue"
           title="Qwen3-TTS 1.7B Model"
-          description="High-quality local AI voice synthesis"
+          description="Open-source AI voice synthesis on HF Spaces"
           features={[
-            "10 voices available",
-            "Tone control via instructions",
-            "Runs entirely on your machine",
+            "10 voices, CPU inference",
+            "Tone control via instruct string",
+            "~3.5 GB, loaded at container startup",
           ]}
         />
 
@@ -128,8 +137,12 @@ export const DocsContent = () => {
           description="Natural-sounding voices for any use case"
         >
           <div className="feature-card-list">
-            <div>• <strong>Female:</strong> Vivian, Elena, Isabella, Aria, Sophie</div>
-            <div>• <strong>Male:</strong> Ryan, Lucas, Marcus, Daniel, Nathan</div>
+            <div>
+              • <strong>Female:</strong> Vivian, Elena, Isabella, Aria, Sophie
+            </div>
+            <div>
+              • <strong>Male:</strong> Ryan, Lucas, Marcus, Daniel, Nathan
+            </div>
           </div>
         </FeatureCard>
 
@@ -141,32 +154,9 @@ export const DocsContent = () => {
           features={[
             "8 preset tones available",
             "Excited, Sad, Whisper, Calm...",
-            "Natural language instructions",
+            "Passed as natural language instruction",
           ]}
         />
-
-        <FeatureCard
-          icon="ri-code-box-line"
-          color="orange"
-          title="Powered by Qwen3-TTS"
-          description="Open-source AI voice synthesis"
-        >
-          <div className="feature-card-list">
-            <div>• Runs locally on your machine</div>
-            <div>• No API limits or costs</div>
-            <div>
-              •{" "}
-              <a
-                href="https://github.com/QwenLM/Qwen3-TTS"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-500 hover:text-blue-700"
-              >
-                View on GitHub →
-              </a>
-            </div>
-          </div>
-        </FeatureCard>
       </div>
     </div>
   );
@@ -178,7 +168,7 @@ export const DocsContent = () => {
 export const AboutContent = () => {
   return (
     <div className="w-full p-3 text-left">
-      <h3 className="mb-3 text-label pl-2">Perfect For</h3>
+      <h3 className="mb-3 text-label pl-2">Built For</h3>
 
       <div className="flex flex-col gap-2">
         <AboutCard
@@ -192,7 +182,7 @@ export const AboutContent = () => {
           icon="ri-code-s-slash-line"
           color="blue"
           title="Developers"
-          description="Voice assistants, chatbots, apps, customer service tools"
+          description="Voice assistants, chatbots, accessibility tooling"
         />
 
         <AboutCard
@@ -205,8 +195,8 @@ export const AboutContent = () => {
         <AboutCard
           icon="ri-star-line"
           color="purple"
-          title="Why Choose Vocably?"
-          description="Runs locally with unlimited usage, no subscriptions, and better quality than browser TTS"
+          title="Why Vocably?"
+          description="JWT-secured API, Docker containerized, cloud deployed — production-grade TTS portfolio project"
         />
       </div>
     </div>

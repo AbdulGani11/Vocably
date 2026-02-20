@@ -1,6 +1,6 @@
 # Vocably
 
-Full-stack text-to-speech web application — FastAPI backend deployed on Hugging Face Spaces, React frontend, JWT-authenticated REST API, Docker containerized.
+Full-stack text-to-speech web application powered by Qwen3-TTS — React frontend, FastAPI backend, JWT-authenticated REST API, Docker containerized. Runs locally via `start.bat` or deployed on Render (frontend) + Hugging Face Spaces (backend).
 
 ## Live Deployment
 
@@ -32,17 +32,45 @@ Browser (Render)
 
 All `/api/tts` requests require a signed JWT. Login endpoint issues an HS256 token (8h expiry) stored in `sessionStorage`.
 
-Default credentials: `vocably` / `vocably2026`
+Default credentials: `vocably` / `vocably2026`  
 Override via env vars: `VOCABLY_USERNAME`, `VOCABLY_PASSWORD`, `JWT_SECRET_KEY`
 
 ## Run Locally (Development)
 
+**Prerequisites:** Node.js 18+, Python 3.10+, 16 GB RAM (model downloads ~3.5 GB on first run)
+
 ```bash
-.\start.bat          # starts backend + frontend
-# open http://localhost:5173
+git clone https://github.com/AbdulGani11/Vocably.git
+cd Vocably
 ```
 
-Prerequisites: Node.js 18+, Python 3.10+, 16 GB RAM (model downloads ~3.5 GB on first run)
+Create a `.env` file in the project root:
+
+```env
+VITE_TTS_BACKEND_URL=http://localhost:8000
+```
+
+**Windows:**
+
+```bash
+.\start.bat      # starts backend + frontend together
+```
+
+**Linux / macOS:**
+
+```bash
+# Terminal 1 — backend
+cd backend
+python -m venv qwen_env && source qwen_env/bin/activate
+pip install -r requirements.txt
+python main.py
+
+# Terminal 2 — frontend
+npm install
+npm run dev
+```
+
+Open http://localhost:5173
 
 ## Docker (Backend)
 
@@ -54,3 +82,7 @@ docker-compose down
 ## Documentation
 
 See [documentation.md](documentation.md) — setup, auth flow, Docker, API reference, deployment, and concepts.
+
+## License
+
+MIT

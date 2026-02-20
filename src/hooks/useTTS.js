@@ -6,7 +6,7 @@ const TTS_BACKEND_URL = import.meta.env.VITE_TTS_BACKEND_URL || "http://localhos
 export const useTTS = () => {
     // Text input from user
     const [text, setText] = useState(
-        "Welcome to Vocably. Experience natural-sounding voice synthesis powered by Qwen3-TTS. Type your text here and hit play to hear it instantly."
+        "Welcome to Vocably. Experience natural-sounding voice synthesis powered by Qwen3-TTS. Type your text here and hit play."
     );
 
     // Playback state
@@ -117,7 +117,7 @@ export const useTTS = () => {
 
             // Provide helpful error messages
             if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
-                setError("Cannot connect to TTS server. Make sure the backend is running (run.bat).");
+                setError("Cannot connect to TTS server. Check that the backend is running (local) or accessible (cloud).");
             } else {
                 setError(err.message || "Failed to generate speech. Please try again.");
             }

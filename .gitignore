@@ -1,27 +1,31 @@
-# Dependencies
+# ── Dependencies ─────────────────────────────────────────────────────────────
 node_modules/
 backend/qwen_env/
 
-# Build output
+# ── Build output (Vite) ───────────────────────────────────────────────────────
 dist/
 
-# Environment variables
+# ── Environment & secrets (NEVER commit) ─────────────────────────────────────
 .env
 .env.*
 
-# Logs
+# ── Logs ──────────────────────────────────────────────────────────────────────
 *.log
 
-# Local-only docs (not for GitHub)
+# ── OS artifacts ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Editor ────────────────────────────────────────────────────────────────────
+.vscode/
+.claude/
+
+# ── Python cache ──────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+
+# ── Local-only docs ───────────────────────────────────────────────────────────
 Qwen3-TTS_Installation_Guide*
 TECH_STACK.md
 VOCABLY_GUIDE.md
 Untitled*.md
-
-# Editor
-.vscode/
-.claude/
-
-# Python cache
-__pycache__/
-*.py[cod]

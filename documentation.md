@@ -26,18 +26,21 @@ A single reference covering everything about Vocably: what it is, how to run it,
 18. [Troubleshooting](#18-troubleshooting)
 19. [Performance Tips](#19-performance-tips)
 20. [Quick Reference — Commands](#20-quick-reference--commands)
+21. [Cloud Deployment](#21-cloud-deployment)
+22. [FAQ](#22-faq)
 
 ---
 
 ## 1. Project Overview
 
-Vocably is a local text-to-speech application powered by the Qwen3-TTS 1.7B model. It converts text to high-quality WAV audio entirely on-device — no cloud APIs, no data upload, no subscription.
+Vocably is a full-stack text-to-speech application powered by the Qwen3-TTS 1.7B model. The React frontend is deployed on Render; the FastAPI backend runs in a Docker container on Hugging Face Spaces. It also runs fully locally via `start.bat` (no Docker required). It converts text to high-quality WAV audio via a JWT-authenticated REST API.
 
 **Production-grade characteristics:**
 
 - **JWT authentication** — every `/api/tts` request requires a signed HS256 Bearer token; unauthenticated requests return HTTP 401
-- **Docker containerization** — backend packaged as a `python:3.11-slim` container with layer-cached `pip install`; deployable to Cloud Run or HF Spaces
-- **CPU-only inference** — runs on 16 GB RAM without a GPU using `torch.inference_mode()` and `set_num_threads(os.cpu_count())`
+- **Docker containerization** — backend packaged as a `python:3.11-slim` container with layer-cached `pip install`, non-root user, deployed to HF Spaces
+- **Cloud deployed** — frontend on Render (CDN static site), backend on Hugging Face Spaces (Docker, CPU Basic, 16 GB RAM)
+- **CPU-only inference** — runs without a GPU using `torch.inference_mode()` and `set_num_threads(os.cpu_count())`
 - **Instruction-following voice control** — the 1.7B CustomVoice model accepts a natural language `instruct` string to control tone, pacing, and style
 
 ---
@@ -961,3 +964,279 @@ Pinned versions ensure identical installs everywhere — on your laptop and on H
 | Change tone                   | Tone buttons below text area           | UI                       |
 | Download audio                | Button next to Play (after generation) | UI                       |
 | Log out                       | "Log out" button (top-right of navbar) | UI                       |
+
+---
+
+## 21. Cloud Deployment
+
+Vocably runs as two independently deployed services: the **React frontend on Render** (static site CDN) and the **FastAPI backend on Hugging Face Spaces** (Docker container). They communicate over HTTPS — the frontend sends JWT-authenticated POST requests to the backend API.
+
+---
+
+### Architecture
+
+```
+User Browser
+    │
+    ▼
+Render CDN  (vocably.onrender.com)
+    │   React app (static files: HTML, JS, CSS)
+    │   Built with: npm run build → dist/
+    │
+    │  POST /login  ──────────────────────────────────────────────►
+    │  POST /api/tts  Authorization: Bearer <JWT>  ───────────────►
+    │                                                              │
+    │                                               Hugging Face Spaces
+    │                                               (gilfoyle99213-vocably-backend.hf.space)
+    │                                               Docker container · CPU Basic · 16 GB RAM
+    │                                               FastAPI · Uvicorn · port 7860
+    │                                               Qwen3-TTS model (downloaded at runtime)
+    │
+    │◄── {access_token} / base64 WAV ◄───────────────────────────
+```
+
+---
+
+### Backend — Hugging Face Spaces (Docker)
+
+**Why HF Spaces:** Free tier provides 16 GB RAM and 50 GB disk — enough for the 3.5 GB Qwen3-TTS model. CPU Basic costs nothing. No credit card required. HF Hub also handles model caching natively.
+
+**Why not GCP Cloud Run:** Cloud Run bills per CPU-second during inference. A 3.5 GB model inference request could trigger unexpected charges. HF Spaces is the pragmatic choice for an ML demo — evaluated Cloud Run and made an explicit decision.
+
+#### What Hugging Face Spaces expects from a Docker container
+
+- Listens on **port 7860** (HF injects `PORT=7860` as an env var)
+- Runs as a **non-root user** (UID 1000) — HF security requirement
+- Files must be `--chown=user` so the non-root user can read them
+
+#### Dockerfile — key decisions
+
+```dockerfile
+FROM python:3.11-slim
+# 3.11-slim: minimal attack surface, ~50 MB vs ~900 MB for full image
+
+RUN apt-get install -y gcc sox
+# gcc: compiles cryptography package (required by python-jose for JWT)
+# sox: suppresses SoX audio warning on model startup
+
+RUN useradd -m -u 1000 user
+USER user
+ENV PATH=/home/user/.local/bin:$PATH
+# Non-root user: required by HF Spaces; limits blast radius if container is compromised
+
+COPY --chown=user requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY --chown=user main.py auth.py ./
+# requirements.txt copied BEFORE app code:
+# Docker caches each RUN layer. If only main.py changes, Docker reuses the pip
+# install layer — saves 3-5 minutes on every redeploy.
+
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-7860}
+# Shell form (not JSON array): enables ${PORT:-7860} variable substitution.
+# JSON array form ["uvicorn", ..., "--port", "7860"] does NOT expand env vars.
+# HF Spaces injects PORT=7860; local docker-compose sets PORT=8000.
+# --host 0.0.0.0: binds to all interfaces — required inside a container.
+# (127.0.0.1 only accepts connections from within the container itself.)
+```
+
+#### Steps to deploy backend to HF Spaces
+
+```bash
+# 1. Create Space at huggingface.co/new-space
+#    SDK: Docker | Hardware: CPU Basic (free) | Visibility: Public
+
+# 2. Clone the Space repo
+git clone https://huggingface.co/spaces/Gilfoyle99213/vocably-backend hf-vocably-backend
+cd hf-vocably-backend
+
+# 3. Copy backend files
+Copy-Item ..\Vocably\backend\Dockerfile .
+Copy-Item ..\Vocably\backend\main.py .
+Copy-Item ..\Vocably\backend\auth.py .
+Copy-Item ..\Vocably\backend\requirements.txt .
+
+# 4. Commit and push — HF Spaces triggers a Docker build automatically
+git add .
+git commit -m "Deploy Vocably backend to HF Spaces"
+git push
+# When prompted for password: use HF access token (huggingface.co/settings/tokens)
+# Token must have Write permission
+
+# 5. Set environment variables in HF Spaces UI
+#    Space → Settings → Variables and secrets → New secret:
+#    JWT_SECRET_KEY   = <strong random string>
+#    FRONTEND_URL     = https://vocably.onrender.com   ← fixes CORS
+#    VOCABLY_USERNAME = vocably
+#    VOCABLY_PASSWORD = vocably2026
+```
+
+#### Verify backend is live
+
+```bash
+curl https://gilfoyle99213-vocably-backend.hf.space/health
+# Expected: {"status":"ok","model_loaded":true}
+
+curl -X POST https://gilfoyle99213-vocably-backend.hf.space/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"vocably","password":"vocably2026"}'
+# Expected: {"access_token":"eyJ...","token_type":"bearer"}
+```
+
+---
+
+### Frontend — Render (Static Site)
+
+**Why Render:** Free static site hosting with CDN, automatic HTTPS, and GitHub auto-deploy on push. Correct choice for a Vite/React app — no server needed, just pre-built static files.
+
+**Why static hosting:** `npm run build` produces HTML + JS + CSS in `dist/`. No Node.js runtime is needed at serve time — a CDN serves the files directly. This is faster and cheaper than a Node server.
+
+#### Environment variable
+
+The frontend needs to know where the backend is:
+
+```
+VITE_TTS_BACKEND_URL = https://gilfoyle99213-vocably-backend.hf.space
+```
+
+`VITE_` prefix is required — Vite only injects env vars with this prefix into the browser bundle at build time. Variables without it are not exposed to client code.
+
+#### Steps to deploy frontend to Render
+
+```
+1. Push Vocably repo to GitHub (github.com/AbdulGani11/Vocably)
+
+2. render.com → New → Static Site
+   Connect GitHub → select Vocably repo
+
+3. Configure:
+   Name:              vocably
+   Build Command:     npm install && npm run build
+   Publish Directory: dist
+
+4. Add Environment Variable:
+   VITE_TTS_BACKEND_URL = https://gilfoyle99213-vocably-backend.hf.space
+
+5. Deploy
+   Render runs: npm install && npm run build
+   Serves dist/ from CDN at: https://vocably.onrender.com
+```
+
+**Note:** Render free tier spins down after 15 minutes of inactivity (for web services). Static sites do not spin down — they're always-on because files are served directly by the CDN.
+
+---
+
+### CORS — connecting frontend to backend
+
+CORS (Cross-Origin Resource Sharing) is the browser's mechanism for blocking cross-origin requests unless the server explicitly allows them.
+
+**Problem:** Frontend is at `vocably.onrender.com`, backend is at `gilfoyle99213-vocably-backend.hf.space` — different origins. Browser blocks the request by default.
+
+**Solution:** `main.py` uses `CORSMiddleware` with `allow_origins` read from the `FRONTEND_URL` env var:
+
+```python
+ALLOWED_ORIGINS = [os.getenv("FRONTEND_URL", "http://localhost:5173")]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization"],  # Authorization required for JWT
+)
+```
+
+Setting `FRONTEND_URL=https://vocably.onrender.com` in HF Spaces secrets allows the deployed frontend exactly — nothing else. A wildcard `"*"` origin would work but is a security misconfiguration on an authenticated API.
+
+---
+
+### Environment Variables Summary
+
+| Variable               | Where set         | Purpose                                                        |
+| ---------------------- | ----------------- | -------------------------------------------------------------- |
+| `VITE_TTS_BACKEND_URL` | Render dashboard  | Frontend → backend URL (injected at build time)                |
+| `JWT_SECRET_KEY`       | HF Spaces secrets | Signs/verifies JWT tokens                                      |
+| `FRONTEND_URL`         | HF Spaces secrets | CORS allowed origin                                            |
+| `VOCABLY_USERNAME`     | HF Spaces secrets | Login credential (optional override)                           |
+| `VOCABLY_PASSWORD`     | HF Spaces secrets | Login credential (optional override)                           |
+| `PORT`                 | HF Spaces (auto)  | Uvicorn port — HF injects 7860; local docker-compose sets 8000 |
+
+---
+
+### Live URLs
+
+| Layer       | URL                                                   |
+| ----------- | ----------------------------------------------------- |
+| Frontend    | https://vocably.onrender.com                          |
+| Backend API | https://gilfoyle99213-vocably-backend.hf.space        |
+| API Health  | https://gilfoyle99213-vocably-backend.hf.space/health |
+| API Docs    | https://gilfoyle99213-vocably-backend.hf.space/docs   |
+
+---
+
+### GitHub Push — Safe Practices
+
+`.gitignore` excludes all secrets and generated files:
+
+```gitignore
+.env        # VITE_TTS_BACKEND_URL — never committed
+.env.*      # all env variants
+
+node_modules/       # reinstalled by npm install
+dist/               # rebuilt by npm run build
+backend/qwen_env/   # rebuilt by pip install
+__pycache__/        # Python bytecode
+```
+
+**Standard push workflow:**
+
+```bash
+git add <specific files>    # never: git add .  — review what you're adding
+git status                  # confirm no secrets are staged
+git commit -m "message"
+git pull origin main --rebase   # sync remote changes before pushing
+git push
+```
+
+`git pull --rebase` is preferred over `git pull` (merge): keeps the commit history linear — no unnecessary merge commits when syncing before a push.
+
+---
+
+## 22. FAQ
+
+---
+
+**Q: Can I delete the `welcome-to-docker` container and image from Docker Desktop?**
+
+Yes. It is Docker's built-in tutorial container — created automatically when you first installed Docker Desktop. It has no relation to Vocably. Delete both the container and the image (`docker/welcome-to-docker`) from Docker Desktop → Containers and Docker Desktop → Images.
+
+---
+
+**Q: Does the HF Spaces server take ~2–3 minutes to start every time a user visits?**
+
+No — only on container restart. The container runs continuously on HF Spaces servers. The 2–3 minute startup (model download + warmup generation) happens once when the container boots. After that, every request is just inference time (~5–30 seconds depending on text length). Container restarts are triggered by: adding/changing environment variables, pushing a new deployment, or a crash — not by individual user visits.
+
+---
+
+**Q: Do I need to keep Docker Desktop running on my Windows machine for the deployed app to work?**
+
+No. The deployed app (`vocably.onrender.com` → `gilfoyle99213-vocably-backend.hf.space`) runs entirely on cloud servers. Docker Desktop on your local machine is only needed when developing locally with `docker-compose up`. You can close Docker Desktop when not doing local development — it has no effect on the live deployment.
+
+---
+
+**Q: Why does HF Spaces restart when I add a new environment variable?**
+
+Adding or changing any secret or variable in HF Spaces Settings triggers an automatic container restart so the new value is picked up by the running process. The restart takes 2–3 minutes including model warmup. This is expected behaviour — not a bug.
+
+---
+
+**Q: The frontend is at a different URL than the backend. Why doesn't the browser block the request?**
+
+The browser enforces CORS (Cross-Origin Resource Sharing) — by default it blocks requests from one origin (e.g., `vocably.onrender.com`) to a different origin (e.g., `gilfoyle99213-vocably-backend.hf.space`). The FastAPI backend explicitly allows the frontend origin via `CORSMiddleware` with `allow_origins=[FRONTEND_URL]`. Without this, every API call from the deployed frontend would be blocked by the browser before it even reaches the server.
+
+---
+
+**Q: Why does TTS generation take 3–8 minutes on the deployed app? Other platforms are instant.**
+
+Other platforms (ElevenLabs, Google TTS, etc.) run on cloud GPUs and use heavily optimized or proprietary models — both cost money. Vocably's free tier on Hugging Face Spaces runs on 2 shared vCPUs with no GPU. Qwen3-TTS 1.7B generates audio token-by-token; on a GPU this takes 5–10 seconds, on CPU it takes minutes.
+
+The explicit trade-off: zero infrastructure cost vs. inference latency. For a portfolio project this is acceptable — the architecture (JWT auth, Docker containerization, cloud deployment, CORS) is what the project demonstrates, not production-grade latency. Upgrading to an HF Spaces GPU (T4 Small, ~$0.60/hr on-demand) would bring inference to under 10 seconds.

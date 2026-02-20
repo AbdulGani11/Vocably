@@ -1,12 +1,22 @@
 import { useState } from "react";
 import { useTTS } from "../hooks/useTTS";
-import { MAX_TEXT_LENGTH, WARNING_THRESHOLD, VOICES, TONE_PRESETS, USE_CASES } from "../utils/constants";
+import {
+  MAX_TEXT_LENGTH,
+  WARNING_THRESHOLD,
+  VOICES,
+  TONE_PRESETS,
+  USE_CASES,
+} from "../utils/constants";
 import DropupSelector from "../components/Hero/DropupSelector";
 import ExampleSelector from "../components/Hero/ExampleSelector";
 
 // Selector items — defined outside the component so they aren't recreated on every render
 const VOICE_ITEMS = VOICES.map((name) => ({ value: name, label: name }));
-const TONE_ITEMS = TONE_PRESETS.map((t) => ({ value: t.instruction, label: t.label, icon: t.icon }));
+const TONE_ITEMS = TONE_PRESETS.map((t) => ({
+  value: t.instruction,
+  label: t.label,
+  icon: t.icon,
+}));
 
 const Hero = () => {
   const {
@@ -50,9 +60,7 @@ const Hero = () => {
       {/* 1. CENTERED HEADLINE (THE PITCH) */}
       <div className="flex flex-col items-center justify-center w-full grow">
         <div className="text-center z-10 flex flex-col items-center mb-10 md:mb-8">
-          <h1
-            className="mb-4 text-3xl md:text-5xl lg:text-6xl font-medium leading-[1.1] tracking-tight text-neutral-900 animate-fade-in-up"
-          >
+          <h1 className="mb-4 text-3xl md:text-5xl lg:text-6xl font-medium leading-[1.1] tracking-tight text-neutral-900 animate-fade-in-up">
             Transform Text to Voice, <br />
             <span className="text-neutral-500">Instantly.</span>
           </h1>
@@ -92,18 +100,21 @@ const Hero = () => {
                   onClick={() => setIsExpanded(!isExpanded)}
                   className="flex items-center gap-1 text-[10px] md:text-xs font-medium text-neutral-400 hover:text-neutral-600 transition-colors"
                   title={isExpanded ? "Collapse textarea" : "Expand textarea"}
-                  aria-label={isExpanded ? "Collapse textarea" : "Expand textarea"}
+                  aria-label={
+                    isExpanded ? "Collapse textarea" : "Expand textarea"
+                  }
                 >
-                  <i className={isExpanded ? "ri-collapse-diagonal-line" : "ri-expand-diagonal-line"}></i>
+                  <i
+                    className={
+                      isExpanded
+                        ? "ri-collapse-diagonal-line"
+                        : "ri-expand-diagonal-line"
+                    }
+                  ></i>
                   <span className="hidden sm:inline">
                     {isExpanded ? "Collapse" : "Expand"}
                   </span>
                 </button>
-
-                <div className="flex items-center gap-1 text-[10px] md:text-xs font-medium text-neutral-400">
-                  <i className="ri-flashlight-line text-xs"></i>
-                  <span>Instant Preview</span>
-                </div>
               </div>
 
               {/* Input Area */}
@@ -189,11 +200,15 @@ const Hero = () => {
                         isLoading
                           ? "bg-neutral-400 cursor-wait"
                           : isSpeaking
-                          ? "bg-red-500 hover:bg-red-600"
-                          : "bg-neutral-900 hover:scale-105 hover:bg-black"
+                            ? "bg-red-500 hover:bg-red-600"
+                            : "bg-neutral-900 hover:scale-105 hover:bg-black"
                       }`}
                     aria-label={
-                      isLoading ? "Generating speech..." : isSpeaking ? "Stop speaking" : "Play text as speech"
+                      isLoading
+                        ? "Generating speech..."
+                        : isSpeaking
+                          ? "Stop speaking"
+                          : "Play text as speech"
                     }
                   >
                     {isLoading ? (

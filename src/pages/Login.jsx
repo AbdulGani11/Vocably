@@ -121,7 +121,7 @@ const Login = ({ onLogin, authError, isLoggingIn }) => {
 
         {/* Hint */}
         <p className="mt-5 text-center text-xs text-neutral-400">
-          Local demo · JWT-secured · Private by design
+          JWT-secured · Local & cloud deployment · Private by design
         </p>
       </div>
     </div>
