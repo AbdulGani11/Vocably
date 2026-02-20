@@ -63,7 +63,7 @@ Vocably is a full-stack text-to-speech application powered by the Qwen3-TTS 1.7B
 
 | Technology       | Purpose                               |
 | ---------------- | ------------------------------------- |
-| **Python 3.10+** | Backend language                      |
+| **Python 3.11+** | Backend language                      |
 | **FastAPI**      | Async web framework for REST APIs     |
 | **Uvicorn**      | ASGI server for FastAPI               |
 | **Pydantic**     | Data validation via Python type hints |
@@ -104,7 +104,7 @@ Vocably is a full-stack text-to-speech application powered by the Qwen3-TTS 1.7B
 | API                     | Purpose                                        |
 | ----------------------- | ---------------------------------------------- |
 | **Fetch API**           | HTTP requests to backend                       |
-| **Web Audio API**       | Audio playback via `<audio>` element           |
+| **HTMLAudioElement**    | Audio playback via `new Audio(blobUrl)`        |
 | **Blob API**            | Creating audio blob from base64                |
 | **URL.createObjectURL** | Creating playable audio URLs                   |
 | **sessionStorage**      | Secure JWT token storage (clears on tab close) |
@@ -140,8 +140,8 @@ Vocably is a full-stack text-to-speech application powered by the Qwen3-TTS 1.7B
 │                                                                 │
 │  POST /login     — validate_credentials() → create_access_      │
 │                    token() → returns {access_token, token_type} │
-│  GET  /health    — returns {status, model, speakers}; public;   │
-│                    used by Docker/load-balancer health checks   │
+│  GET  /health    — returns {status: "ok"/"loading",             │
+│                    model_loaded: bool}; public health check      │
 │  POST /api/tts   — Depends(verify_token) extracts + decodes JWT │
 │                    → calls tts_model.generate_custom_voice()    │
 │                    → returns base64-encoded WAV in JSON         │
@@ -225,7 +225,7 @@ tts_model.generate_custom_voice(text, speaker, instruct)
     │
     ▼
 soundfile.write() → BytesIO buffer → base64.b64encode()
-    → returned as JSON: { audio_base64, sample_rate, duration, ... }
+    → returned as JSON: { audio_base64, sample_rate, format }
     │
     ▼
 Browser: atob(audio_base64) → Uint8Array → Blob("audio/wav")
@@ -483,7 +483,8 @@ RUN apt-get install gcc sox  # gcc for cryptography (JWT), sox for audio
 COPY requirements.txt .      # ← Copy deps first (layer cache optimization)
 RUN pip install -r ...       # ← Cached if requirements.txt unchanged
 COPY main.py auth.py ./      # ← App code last (changes most often)
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-7860}
+# Shell form required — JSON array does not expand ${PORT:-7860} env vars
 ```
 
 **Layer caching:** `requirements.txt` is installed before app code. If only `main.py` changes, Docker skips the slow `pip install` layer on the next build.
@@ -561,13 +562,13 @@ A Python framework for building web APIs. In Vocably, the frontend sends text + 
 
 ### Endpoints
 
-| Method | Path       | Auth             | Purpose                          |
-| ------ | ---------- | ---------------- | -------------------------------- |
-| GET    | `/`        | Public           | Root health check                |
-| GET    | `/health`  | Public           | Model load status                |
-| POST   | `/login`   | Public           | Returns JWT on valid credentials |
-| POST   | `/api/tts` | **JWT required** | Generates speech from text       |
-| GET    | `/docs`    | Public           | Interactive Swagger UI           |
+| Method | Path       | Auth             | Purpose                                      |
+| ------ | ---------- | ---------------- | -------------------------------------------- |
+| GET    | `/`        | Public           | Returns model name, speakers list, auth info |
+| GET    | `/health`  | Public           | Model load status                            |
+| POST   | `/login`   | Public           | Returns JWT on valid credentials             |
+| POST   | `/api/tts` | **JWT required** | Generates speech from text                   |
+| GET    | `/docs`    | Public           | Interactive Swagger UI                       |
 
 ### Pydantic Models
 
@@ -635,7 +636,7 @@ def verify_token(credentials = Depends(HTTPBearer())) -> dict:
 
 ### Lifespan
 
-Runs code at server start (before any requests) and stop:
+Runs code at server startup (model load, warmup) and shutdown:
 
 ```python
 @asynccontextmanager
@@ -734,7 +735,7 @@ Each parameter is a floating-point weight that defines the model's learned behav
 - `float32` → 1.7B × 4 bytes ≈ 6.8 GB in RAM (Vocably uses this on CPU)
 - `float16` → 1.7B × 2 bytes ≈ 3.4 GB (GPU half-precision; not used here)
 
-The download is ~3.5 GB (quantized checkpoints); RAM usage expands to ~6–8 GB after loading.
+Model weights are stored in float16/bfloat16 safetensors format on disk (~3.5 GB). When loaded as float32 for CPU inference, they expand to ~6–8 GB in RAM.
 
 ### torch.inference_mode()
 
@@ -758,8 +759,8 @@ torch.set_num_threads(os.cpu_count())  # e.g. 16 threads on an Intel i5-1340P
 PyTorch initializes certain internal components (e.g. MKLDNN primitives, memory allocators) lazily on the first forward pass. A warmup call at startup absorbs this latency before any real user request:
 
 ```python
-tts_model.generate_custom_voice(text="Hello.", speaker="Vivian")
-# Runs inside lifespan() — server not marked ready until this completes
+tts_model.generate_custom_voice(text="Hello.", language="Auto", speaker="Vivian")
+# Runs inside lifespan() with torch.inference_mode() — server not marked ready until this completes
 ```
 
 ### Hugging Face Hub
@@ -818,7 +819,7 @@ npm audit fix      # Auto-fix what it can
 
 ### package.json vs package-lock.json
 
-- **package.json** — lists what packages you want and roughly what version
+- **package.json** — declares direct dependencies with version ranges (e.g., `^4.1.18`)
 - **package-lock.json** — exact versions actually installed. Always commit it.
 
 ### node_modules/
@@ -1134,7 +1135,9 @@ CORS (Cross-Origin Resource Sharing) is the browser's mechanism for blocking cro
 **Solution:** `main.py` uses `CORSMiddleware` with `allow_origins` read from the `FRONTEND_URL` env var:
 
 ```python
-ALLOWED_ORIGINS = [os.getenv("FRONTEND_URL", "http://localhost:5173")]
+ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+if os.environ.get("FRONTEND_URL"):
+    ALLOWED_ORIGINS.append(os.environ["FRONTEND_URL"])  # Render domain added at runtime
 
 app.add_middleware(
     CORSMiddleware,
