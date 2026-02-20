@@ -27,12 +27,20 @@ export const useAuth = () => {
         setIsLoggingIn(true);
         setAuthError(null);
 
+        // 30-second timeout — if HF Spaces backend is cold-starting, the request
+        // would otherwise hang silently for minutes before failing
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+
         try {
             const response = await fetch(`${TTS_BACKEND_URL}/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username, password }),
+                signal: controller.signal,
             });
+
+            clearTimeout(timeoutId);
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
@@ -44,9 +52,16 @@ export const useAuth = () => {
             setIsAuthenticated(true);
             return true;
         } catch (err) {
-            if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
-                setAuthError("Cannot connect to server. Make sure the backend is running.");
+            clearTimeout(timeoutId);
+
+            if (err.name === "AbortError") {
+                // Timeout — backend is likely cold-starting on HF Spaces
+                setAuthError("Server is starting up. Please wait 1–2 minutes and try again.");
+            } else if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
+                // Network unreachable
+                setAuthError("Cannot connect to server. Check your connection and try again.");
             } else {
+                // Actual auth error (wrong credentials, 401, etc.)
                 setAuthError(err.message || "Login failed. Please try again.");
             }
             return false;
@@ -54,6 +69,7 @@ export const useAuth = () => {
             setIsLoggingIn(false);
         }
     }, []);
+
 
     const logout = useCallback(() => {
         sessionStorage.removeItem(TOKEN_KEY);
