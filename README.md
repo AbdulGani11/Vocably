@@ -44,11 +44,17 @@ git clone https://github.com/AbdulGani11/Vocably.git
 cd Vocably
 ```
 
-Create a `.env` file in the project root:
+**Environment files (already in the repo — no secrets):**
 
-```env
-VITE_TTS_BACKEND_URL=http://localhost:8000
-```
+| File               | Used when       | Contains                         |
+| ------------------ | --------------- | -------------------------------- |
+| `.env.development` | `npm run dev`   | `localhost:8000` — local backend |
+| `.env.production`  | `npm run build` | HF Spaces URL — cloud backend    |
+
+> These files are committed to the repo because they contain **no secrets** — only public URLs.
+> Vite automatically picks the correct file based on the command. No manual switching needed.
+>
+> The `.env` file (which would contain real secrets like `JWT_SECRET_KEY`) is gitignored and never committed.
 
 **Windows:**
 
