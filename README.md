@@ -60,6 +60,9 @@ Open [http://localhost:5173](http://localhost:5173)
 
 ## Docker (Backend)
 
+> **Beginners:** You do **not** need Docker for daily development. Use `.\start.bat` instead — it handles everything.  
+> Docker is only needed if you want to test the containerized backend locally (e.g., after changing the `Dockerfile`).
+
 ```bash
 docker-compose up --build   # local container (port 8000)
 docker-compose down
