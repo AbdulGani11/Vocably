@@ -1,22 +1,35 @@
 export const MAX_TEXT_LENGTH = 3000;
 export const WARNING_THRESHOLD = 2700;
 
-// Qwen3-TTS CustomVoice Speakers
+// Kokoro-82M voices — grouped by accent
 export const VOICES = [
-    "Vivian", "Ryan", "Elena", "Lucas", "Isabella",
-    "Marcus", "Aria", "Daniel", "Sophie", "Nathan",
+    // American Female
+    { value: "af_heart",   label: "Heart",   group: "American Female" },
+    { value: "af_bella",   label: "Bella",   group: "American Female" },
+    { value: "af_nicole",  label: "Nicole",  group: "American Female" },
+    { value: "af_sarah",   label: "Sarah",   group: "American Female" },
+    { value: "af_sky",     label: "Sky",     group: "American Female" },
+    // American Male
+    { value: "am_adam",    label: "Adam",    group: "American Male" },
+    { value: "am_michael", label: "Michael", group: "American Male" },
+    { value: "am_echo",    label: "Echo",    group: "American Male" },
+    { value: "am_liam",    label: "Liam",    group: "American Male" },
+    // British Female
+    { value: "bf_emma",    label: "Emma",    group: "British Female" },
+    { value: "bf_alice",   label: "Alice",   group: "British Female" },
+    { value: "bf_lily",    label: "Lily",    group: "British Female" },
+    // British Male
+    { value: "bm_george",  label: "George",  group: "British Male" },
+    { value: "bm_daniel",  label: "Daniel",  group: "British Male" },
+    { value: "bm_lewis",   label: "Lewis",   group: "British Male" },
 ];
 
-// Tone/Style Presets for instruction-based voice control
-export const TONE_PRESETS = [
-    { id: "none", label: "Default", icon: "ri-voice-recognition-line", instruction: "" },
-    { id: "excited", label: "Excited", icon: "ri-emotion-happy-line", instruction: "Speak with excitement and enthusiasm" },
-    { id: "sad", label: "Sad", icon: "ri-emotion-sad-line", instruction: "Speak in a sad, melancholic tone" },
-    { id: "angry", label: "Angry", icon: "ri-emotion-unhappy-line", instruction: "Speak with anger and frustration" },
-    { id: "whisper", label: "Whisper", icon: "ri-volume-mute-line", instruction: "Whisper softly and quietly" },
-    { id: "news", label: "News", icon: "ri-newspaper-line", instruction: "Speak like a professional news anchor" },
-    { id: "calm", label: "Calm", icon: "ri-mental-health-line", instruction: "Speak slowly, calmly, and peacefully" },
-    { id: "dramatic", label: "Dramatic", icon: "ri-movie-2-line", instruction: "Speak with dramatic flair and intensity" },
+// Speed presets — replaces Tone (Kokoro supports speed, not tone instructions)
+export const SPEED_PRESETS = [
+    { id: "slow",      label: "Slow",      icon: "ri-snail-line",       speed: 0.75 },
+    { id: "normal",    label: "Normal",    icon: "ri-equalizer-line",   speed: 1.0  },
+    { id: "fast",      label: "Fast",      icon: "ri-speed-up-line",    speed: 1.25 },
+    { id: "very_fast", label: "Very Fast", icon: "ri-rocket-2-line",    speed: 1.5  },
 ];
 
 // Use case badges — clickable demos in the headline area

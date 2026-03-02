@@ -55,8 +55,8 @@ export const useAuth = () => {
             clearTimeout(timeoutId);
 
             if (err.name === "AbortError") {
-                // Timeout — backend is likely cold-starting on HF Spaces
-                setAuthError("Server is starting up (loading 3.5 GB model). Please wait 3–5 minutes and try again.");
+                // Timeout — backend unreachable or not running
+                setAuthError("Server not responding. Make sure the backend is running and try again.");
             } else if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
                 // Network unreachable
                 setAuthError("Cannot connect to server. Check your connection and try again.");

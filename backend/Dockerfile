@@ -6,17 +6,17 @@
 #   requirements.txt is copied and installed BEFORE the app code is copied.
 #   If only main.py/auth.py change, Docker reuses the cached pip layer.
 #
-# Architecture note: The model (~3.5GB) downloads at runtime from Hugging Face Hub.
+# Architecture note: The Kokoro-82M model (~500 MB) downloads at runtime from Hugging Face Hub.
 #   It is NOT baked into the image — keeps the image lean and matches HF Spaces behaviour.
 
 # ── Base image ──────────────────────────────────────────────────────────────
 FROM python:3.11-slim
 
 # ── System dependencies ──────────────────────────────────────────────────────
-# gcc  → required by cryptography package (JWT)
-# sox  → suppresses SoX audio warning on model startup
+# gcc       → required by cryptography package (JWT)
+# espeak-ng → required by Kokoro's misaki phonemizer for English G2P
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends gcc sox \
+    && apt-get install -y --no-install-recommends gcc espeak-ng \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Non-root user (required by HF Spaces; security best practice) ────────────

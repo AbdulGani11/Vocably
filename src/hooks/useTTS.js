@@ -6,7 +6,7 @@ const TTS_BACKEND_URL = import.meta.env.VITE_TTS_BACKEND_URL || "http://localhos
 export const useTTS = () => {
     // Text input from user
     const [text, setText] = useState(
-        "Welcome to Vocably. Experience natural-sounding voice synthesis powered by Qwen3-TTS. Type your text here and hit play."
+        "Welcome to Vocably. Experience natural-sounding voice synthesis powered by Kokoro. Type your text here and hit play."
     );
 
     // Playback state
@@ -15,8 +15,8 @@ export const useTTS = () => {
     const [error, setError] = useState(null);
 
     // Configuration state
-    const [selectedVoice, setSelectedVoice] = useState("Vivian");
-    const [instruct, setInstruct] = useState("");
+    const [selectedVoice, setSelectedVoice] = useState("af_heart");
+    const [speed, setSpeed] = useState(1.0);
 
     // Audio availability for download
     const [hasAudio, setHasAudio] = useState(false);
@@ -67,8 +67,7 @@ export const useTTS = () => {
                 body: JSON.stringify({
                     text: text.trim(),
                     voice: selectedVoice,
-                    language: "Auto",
-                    instruct: instruct.trim() || null,
+                    speed: speed,
                 }),
             });
 
@@ -149,8 +148,8 @@ export const useTTS = () => {
         error,
         selectedVoice,
         setSelectedVoice,
-        instruct,
-        setInstruct,
+        speed,
+        setSpeed,
         hasAudio,
         handlePlay,
         handleDownload,

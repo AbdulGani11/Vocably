@@ -6,34 +6,35 @@ echo.
 
 cd /d "%~dp0"
 
-echo [Step 1/4] Checking virtual environment...
-if not exist "qwen_env\Scripts\python.exe" (
-    echo Creating virtual environment...
-    python -m venv qwen_env
+set PYTHON=%~dp0venv\Scripts\python.exe
+
+echo [Step 1/3] Checking Python...
+if not exist "%PYTHON%" (
+    echo ERROR: Python not found at %PYTHON%
+    pause
+    exit /b 1
 )
 echo Done.
 
-echo [Step 2/4] Activating virtual environment...
-call "qwen_env\Scripts\activate.bat"
-echo Done.
-
-echo [Step 3/4] Checking dependencies...
-pip show qwen-tts >nul 2>&1
-if %errorlevel% neq 0 (
-    echo Installing dependencies - please wait...
-    pip install -r requirements.txt
+echo [Step 2/3] Verifying environment...
+%PYTHON% -c "import kokoro; print('kokoro:', kokoro.__file__)"
+if errorlevel 1 (
+    echo ERROR: kokoro not installed. Run:
+    echo   %PYTHON% -m pip install "kokoro>=0.9.4" soundfile
+    pause
+    exit /b 1
 )
 echo Done.
 
 echo.
-echo [Step 4/4] Starting server...
+echo [Step 3/3] Starting server...
 echo ============================================================
 echo   Server starting on http://localhost:8000
 echo   Press Ctrl+C to stop
 echo ============================================================
 echo.
 
-python main.py
+%PYTHON% main.py
 
 echo.
 echo Server stopped.

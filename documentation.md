@@ -1243,3 +1243,22 @@ The browser enforces CORS (Cross-Origin Resource Sharing) — by default it bloc
 Other platforms (ElevenLabs, Google TTS, etc.) run on cloud GPUs and use heavily optimized or proprietary models — both cost money. Vocably's free tier on Hugging Face Spaces runs on 2 shared vCPUs with no GPU. Qwen3-TTS 1.7B generates audio token-by-token; on a GPU this takes 5–10 seconds, on CPU it takes minutes.
 
 The explicit trade-off: zero infrastructure cost vs. inference latency. For a portfolio project this is acceptable — the architecture (JWT auth, Docker containerization, cloud deployment, CORS) is what the project demonstrates, not production-grade latency. Upgrading to an HF Spaces GPU (T4 Small, ~$0.60/hr on-demand) would bring inference to under 10 seconds.
+
+---
+
+**Q: I pushed my forked Qwen3-TTS code to GitHub. How does the `Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice` model still work locally?**
+
+The **code** and the **model weights** are two completely separate things:
+
+|                | Code (your fork)                                                                              | Model Weights                                              |
+| -------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| **What**       | Python library (`qwen_tts/`) — defines the model architecture, tokenizer, and inference logic | ~3.5 GB of trained neural network parameters               |
+| **Where**      | Your GitHub repo (`AbdulGani11/Qwen3-TTS`)                                                    | Hugging Face Hub (`Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice`)  |
+| **Local path** | `Vocably/Qwen3-TTS/` (installed via `pip install -e .`)                                       | `~/.cache/huggingface/hub/` (auto-downloaded on first run) |
+
+When `main.py` calls `Qwen3TTSModel.from_pretrained("Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice")`:
+
+1. **Code** — uses your local fork's Python classes (with optimizations) to build the model architecture
+2. **Weights** — downloads from Hugging Face Hub (only once, then cached at `~/.cache/huggingface/hub/`)
+
+Pushing your code to GitHub has **zero effect** on the model weights. They stay cached locally and are always fetched from Hugging Face, not from your repo. Your fork only contains the code that _runs_ the model, not the model itself.

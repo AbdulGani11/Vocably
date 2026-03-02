@@ -25,3 +25,14 @@ node_modules/
 
 # Documentation
 *.md
+
+# Dev / benchmark scripts — not needed at runtime
+tts_process.py
+profile_tts.py
+benchmark_user_text.py
+test_orpheus.py
+optimize_model.ipynb
+report.md
+
+# Generated audio files from local testing
+testing_audio/

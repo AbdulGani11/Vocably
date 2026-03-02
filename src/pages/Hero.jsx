@@ -4,18 +4,18 @@ import {
   MAX_TEXT_LENGTH,
   WARNING_THRESHOLD,
   VOICES,
-  TONE_PRESETS,
+  SPEED_PRESETS,
   USE_CASES,
 } from "../utils/constants";
 import DropupSelector from "../components/Hero/DropupSelector";
 import ExampleSelector from "../components/Hero/ExampleSelector";
 
 // Selector items — defined outside the component so they aren't recreated on every render
-const VOICE_ITEMS = VOICES.map((name) => ({ value: name, label: name }));
-const TONE_ITEMS = TONE_PRESETS.map((t) => ({
-  value: t.instruction,
-  label: t.label,
-  icon: t.icon,
+const VOICE_ITEMS = VOICES.map((v) => ({ value: v.value, label: v.label }));
+const SPEED_ITEMS = SPEED_PRESETS.map((s) => ({
+  value: s.speed,
+  label: s.label,
+  icon: s.icon,
 }));
 
 const Hero = () => {
@@ -27,8 +27,8 @@ const Hero = () => {
     error,
     selectedVoice,
     setSelectedVoice,
-    instruct,
-    setInstruct,
+    speed,
+    setSpeed,
     hasAudio,
     handlePlay,
     handleDownload,
@@ -161,11 +161,11 @@ const Hero = () => {
                     triggerIcon="ri-mic-line"
                   />
                   <DropupSelector
-                    items={TONE_ITEMS}
-                    selectedValue={instruct}
-                    onChange={setInstruct}
-                    label="Tone"
-                    triggerIcon="ri-voice-recognition-line"
+                    items={SPEED_ITEMS}
+                    selectedValue={speed}
+                    onChange={setSpeed}
+                    label="Speed"
+                    triggerIcon="ri-equalizer-line"
                   />
                 </div>
 
@@ -233,19 +233,19 @@ const Hero = () => {
           </div>
         </div>
 
-        {/* Qwen3-TTS Attribution */}
+        {/* Kokoro Attribution */}
         <div
           className="mt-6 text-center animate-fade-in-up"
           style={{ animationDelay: "500ms" }}
         >
           <a
-            href="https://github.com/QwenLM/Qwen3-TTS"
+            href="https://huggingface.co/hexgrad/Kokoro-82M"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 text-xs text-neutral-500 hover:text-neutral-700 transition-colors"
           >
             <span>Powered by</span>
-            <span className="font-semibold">Qwen3-TTS</span>
+            <span className="font-semibold">Kokoro-82M</span>
             <i className="ri-external-link-line text-xs"></i>
           </a>
         </div>

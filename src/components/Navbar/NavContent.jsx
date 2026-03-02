@@ -75,8 +75,8 @@ export const FeaturesContent = () => {
           title="Natural Voice Synthesis"
           description="Transform text to lifelike speech"
           features={[
-            "10 voices — male and female",
-            "Tone control via natural language",
+            "15 voices — American & British accents",
+            "Speed control (0.75× – 1.5×)",
             "Downloads as WAV audio",
           ]}
         />
@@ -121,12 +121,12 @@ export const DocsContent = () => {
         <FeatureCard
           icon="ri-cpu-line"
           color="blue"
-          title="Qwen3-TTS 1.7B Model"
-          description="Open-source AI voice synthesis on HF Spaces"
+          title="Kokoro-82M Model"
+          description="Non-autoregressive TTS — fast CPU inference"
           features={[
-            "10 voices, CPU inference",
-            "Tone control via instruct string",
-            "~3.5 GB, loaded at container startup",
+            "82M params, ~11s for 10s of audio",
+            "StyleTTS2 + ISTFTNet architecture",
+            "~500 MB, loads in ~3s",
           ]}
         />
 
@@ -134,27 +134,33 @@ export const DocsContent = () => {
           icon="ri-mic-line"
           color="purple"
           title="Available Voices"
-          description="Natural-sounding voices for any use case"
+          description="15 voices across two accents"
         >
           <div className="feature-card-list">
             <div>
-              • <strong>Female:</strong> Vivian, Elena, Isabella, Aria, Sophie
+              • <strong>American Female:</strong> Heart, Bella, Nicole, Sarah, Sky
             </div>
             <div>
-              • <strong>Male:</strong> Ryan, Lucas, Marcus, Daniel, Nathan
+              • <strong>American Male:</strong> Adam, Michael, Echo, Liam
+            </div>
+            <div>
+              • <strong>British Female:</strong> Emma, Alice, Lily
+            </div>
+            <div>
+              • <strong>British Male:</strong> George, Daniel, Lewis
             </div>
           </div>
         </FeatureCard>
 
         <FeatureCard
-          icon="ri-emotion-happy-line"
+          icon="ri-speed-up-line"
           color="green"
-          title="Tone Control"
-          description="Adjust voice emotion and style"
+          title="Speed Control"
+          description="Adjust playback rate to taste"
           features={[
-            "8 preset tones available",
-            "Excited, Sad, Whisper, Calm...",
-            "Passed as natural language instruction",
+            "4 presets: Slow, Normal, Fast, Very Fast",
+            "Range: 0.75× to 1.5×",
+            "Useful for accessibility & learning",
           ]}
         />
       </div>

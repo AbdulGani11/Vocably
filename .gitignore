@@ -1,6 +1,6 @@
 # ── Dependencies ─────────────────────────────────────────────────────────────
 node_modules/
-backend/qwen_env/
+backend/venv/
 
 # ── Build output (Vite) ───────────────────────────────────────────────────────
 dist/
@@ -31,3 +31,7 @@ Qwen3-TTS_Installation_Guide*
 TECH_STACK.md
 VOCABLY_GUIDE.md
 Untitled*.md
+
+# ── Generated audio (benchmarks, tests) ──────────────────────────────────
+backend/testing_audio/
+*.wav
