@@ -1,6 +1,6 @@
 # Vocably
 
-Full-stack text-to-speech web application powered by Qwen3-TTS — React frontend, FastAPI backend, JWT-authenticated REST API, Docker containerized. Runs locally via `start.bat` or deployed on Render (frontend) + Hugging Face Spaces (backend).
+Full-stack text-to-speech web application powered by Kokoro-82M — React frontend, FastAPI backend, JWT-authenticated REST API, Docker containerized. Runs locally via `start.bat` or deployed on Render (frontend) + Hugging Face Spaces (backend).
 
 ## Live Deployment
 
@@ -14,7 +14,7 @@ Full-stack text-to-speech web application powered by Qwen3-TTS — React fronten
 ## Tech Stack
 
 - **Frontend:** React 19, Tailwind CSS v4, Vite — deployed on Render
-- **Backend:** FastAPI + Uvicorn, Qwen3-TTS 1.7B (PyTorch) — deployed on Hugging Face Spaces
+- **Backend:** FastAPI + Uvicorn, Kokoro-82M (PyTorch) — deployed on Hugging Face Spaces
 - **Auth:** JWT Bearer — HS256 signed tokens, `sessionStorage`, `Depends()` FastAPI dependency
 - **Infra:** Docker (`python:3.11-slim`, non-root user, layer-cached build)
 
@@ -25,19 +25,19 @@ Browser (Render)
     │
     ├── POST /login  ──► FastAPI (HF Spaces) ──► validate_credentials() ──► JWT
     │
-    └── POST /api/tts ─► Authorization: Bearer <token> ──► verify_token() ──► Qwen3-TTS ──► WAV
+    └── POST /api/tts ─► Authorization: Bearer <token> ──► verify_token() ──► Kokoro-82M ──► WAV
 ```
 
 ## Authentication
 
 All `/api/tts` requests require a signed JWT. Login endpoint issues an HS256 token (8h expiry) stored in `sessionStorage`.
 
-Default credentials: `vocably` / `vocably2026`  
+Default credentials: `vocably` / `vocably2026`
 Override via env vars: `VOCABLY_USERNAME`, `VOCABLY_PASSWORD`, `JWT_SECRET_KEY`
 
 ## Run Locally (Development)
 
-**Prerequisites:** Node.js 18+, Python 3.10+, 16 GB RAM (model downloads ~3.5 GB on first run)
+**Prerequisites:** Node.js 18+, Python 3.10+, 4 GB RAM (model downloads ~500 MB on first run)
 
 ```bash
 git clone https://github.com/AbdulGani11/Vocably.git
@@ -66,7 +66,7 @@ Open [http://localhost:5173](http://localhost:5173)
 
 ## Docker (Backend)
 
-> **Beginners:** You do **not** need Docker for daily development. Use `.\start.bat` instead — it handles everything.  
+> **Beginners:** You do **not** need Docker for daily development. Use `.\start.bat` instead — it handles everything.
 > Docker is only needed if you want to test the containerized backend locally (e.g., after changing the `Dockerfile`).
 
 ```bash

@@ -33,15 +33,15 @@ A single reference covering everything about Vocably: what it is, how to run it,
 
 ## 1. Project Overview
 
-Vocably is a full-stack text-to-speech application powered by the Qwen3-TTS 1.7B model. The React frontend is deployed on Render; the FastAPI backend runs in a Docker container on Hugging Face Spaces. It also runs fully locally via `start.bat` (no Docker required). It converts text to high-quality WAV audio via a JWT-authenticated REST API.
+Vocably is a full-stack text-to-speech application powered by Kokoro-82M. The React frontend is deployed on Render; the FastAPI backend runs in a Docker container on Hugging Face Spaces. It also runs fully locally via `start.bat` (no Docker required). It converts text to high-quality WAV audio via a JWT-authenticated REST API.
 
 **Production-grade characteristics:**
 
 - **JWT authentication** — every `/api/tts` request requires a signed HS256 Bearer token; unauthenticated requests return HTTP 401
 - **Docker containerization** — backend packaged as a `python:3.11-slim` container with layer-cached `pip install`, non-root user, deployed to HF Spaces
 - **Cloud deployed** — frontend on Render (CDN static site), backend on Hugging Face Spaces (Docker, CPU Basic, 16 GB RAM)
-- **CPU-only inference** — runs without a GPU using `torch.inference_mode()` and `set_num_threads(os.cpu_count())`
-- **Instruction-following voice control** — the 1.7B CustomVoice model accepts a natural language `instruct` string to control tone, pacing, and style
+- **CPU-only inference** — non-autoregressive single forward pass; generates audio in ~11s for a 10s clip on Intel i5 (RTF ~1.2×)
+- **15 voices, speed control** — American & British accents (male + female); speed adjustable 0.75×–1.5×
 
 ---
 
@@ -78,18 +78,18 @@ Vocably is a full-stack text-to-speech application powered by the Qwen3-TTS 1.7B
 
 ### AI / ML
 
-| Technology       | Purpose                    |
-| ---------------- | -------------------------- |
-| **qwen-tts**     | Qwen3-TTS Python package   |
-| **PyTorch**      | Deep learning framework    |
-| **Transformers** | Hugging Face model library |
-| **SoundFile**    | Audio file reading/writing |
+| Technology   | Purpose                             |
+| ------------ | ----------------------------------- |
+| **kokoro**   | Kokoro-82M TTS Python package       |
+| **PyTorch**  | Deep learning framework             |
+| **misaki**   | G2P phonemizer (English text → IPA) |
+| **SoundFile** | Audio file reading/writing         |
 
 ### Model
 
-| Model                               | Size    | Features                                     |
-| ----------------------------------- | ------- | -------------------------------------------- |
-| **Qwen3-TTS-12Hz-1.7B-CustomVoice** | ~3.5 GB | 10 voices, tone control via natural language |
+| Model           | Size    | Features                                              |
+| --------------- | ------- | ----------------------------------------------------- |
+| **Kokoro-82M**  | ~500 MB | 15 voices (American & British), speed control 0.75×–1.5× |
 
 ### Containerization
 
@@ -131,7 +131,7 @@ Vocably is a full-stack text-to-speech application powered by the Qwen3-TTS 1.7B
 │                     sessionStorage.getItem("vocably_token")     │
 └──────────────┬──────────────────────────┬───────────────────────┘
                │ POST /login              │ POST /api/tts
-               │ {username, password}     │ {text, voice, instruct}
+               │ {username, password}     │ {text, voice, speed}
                │                          │ Authorization: Bearer <JWT>
                ▼                          ▼
 ┌─────────────────────────────────────────────────────────────────┐
@@ -143,7 +143,7 @@ Vocably is a full-stack text-to-speech application powered by the Qwen3-TTS 1.7B
 │  GET  /health    — returns {status: "ok"/"loading",             │
 │                    model_loaded: bool}; public health check      │
 │  POST /api/tts   — Depends(verify_token) extracts + decodes JWT │
-│                    → calls tts_model.generate_custom_voice()    │
+│                    → runs Kokoro pipeline in ThreadPoolExecutor │
 │                    → returns base64-encoded WAV in JSON         │
 │  GET  /docs      — auto-generated OpenAPI / Swagger UI          │
 │                                                                 │
@@ -155,14 +155,14 @@ Vocably is a full-stack text-to-speech application powered by the Qwen3-TTS 1.7B
                                │ Python in-process call
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  ML MODEL  ·  Qwen3-TTS-12Hz-1.7B-CustomVoice                  │
-│  PyTorch + Transformers  ·  CPU float32  ·  ~6–8 GB RAM        │
+│  ML MODEL  ·  Kokoro-82M  (hexgrad/Kokoro-82M)                 │
+│  PyTorch  ·  CPU float32  ·  ~1–2 GB RAM  ·  24 kHz output    │
 │                                                                 │
-│  Input  — text string + speaker name + instruct string          │
+│  Input  — text string + voice name + speed (float)             │
 │  Output — WAV audio bytes (soundfile) → base64 → JSON           │
 │  Cache  — ~/.cache/huggingface/hub (Docker named volume)        │
-│  Warmup — one dummy generation at lifespan start to pre-init   │
-│           lazy components before first real request             │
+│  Init   — KPipeline loaded once at lifespan start;             │
+│           spacy en-core-web-sm downloaded on first run only     │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -210,7 +210,7 @@ useTTS.js builds fetch() call
     → method: POST
     → headers: Content-Type: application/json
                Authorization: Bearer <token from sessionStorage>
-    → body: { text, voice, language, instruct }
+    → body: { text, voice, speed }
     │
     ▼
 FastAPI TTSRequest (Pydantic)
@@ -218,10 +218,10 @@ FastAPI TTSRequest (Pydantic)
     → verify_token() dependency runs first; returns 401 if invalid
     │
     ▼
-tts_model.generate_custom_voice(text, speaker, instruct)
-    → runs inside torch.inference_mode() — no gradient tracking
-    → uses torch.set_num_threads(os.cpu_count()) — all CPU cores
-    → returns WAV audio as numpy array + sample_rate
+Kokoro KPipeline(text, voice=voice, speed=speed)
+    → runs in ThreadPoolExecutor (max_workers=1) via run_in_executor
+    → non-autoregressive: single forward pass (not sequential tokens)
+    → returns WAV audio as numpy array + sample_rate (24000)
     │
     ▼
 soundfile.write() → BytesIO buffer → base64.b64encode()
@@ -241,16 +241,16 @@ Browser: atob(audio_base64) → Uint8Array → Blob("audio/wav")
 Vocably/
 ├── backend/
 │   ├── auth.py             # JWT: token creation, verification, credential validation
-│   ├── main.py             # FastAPI server — /login, /health, /api/tts endpoints
+│   ├── main.py             # FastAPI server — /login, /health, /api/tts, /api/voices
 │   ├── requirements.txt    # Python dependencies (pinned versions)
 │   ├── run.bat             # Backend startup script (local)
 │   ├── Dockerfile          # Container definition (production/cloud)
 │   ├── .dockerignore       # Excludes venv, .env, pycache from build context
-│   └── qwen_env/           # Python virtual environment (local only, not in Docker)
+│   └── venv/               # Python virtual environment (local only, not in Docker)
 ├── src/
 │   ├── components/
 │   │   ├── Hero/
-│   │   │   ├── DropupSelector.jsx   # Voice/Tone dropdown selector
+│   │   │   ├── DropupSelector.jsx   # Voice/Speed dropdown selector
 │   │   │   └── ExampleSelector.jsx  # Example text presets
 │   │   └── Navbar/
 │   │       ├── FlyoutLink.jsx       # Animated nav links
@@ -284,8 +284,8 @@ Vocably/
 
 - **Python 3.10+** installed and added to PATH
 - **Node.js 18+** installed
-- **16 GB RAM** minimum
-- **~8 GB disk space** (model + dependencies)
+- **4 GB RAM** minimum recommended
+- **~2 GB disk space** (model + dependencies)
 
 ### Option 1: Single Command (Recommended)
 
@@ -340,16 +340,17 @@ docker-compose down
 
 ## 6. First Run Expectations
 
-| Step                   | What Happens                       | Time          |
-| ---------------------- | ---------------------------------- | ------------- |
-| Virtual environment    | Creates `qwen_env` folder          | ~10 seconds   |
-| Install dependencies   | Downloads Python packages          | 2–5 minutes   |
-| Download model         | Downloads ~3.5 GB from HuggingFace | 10–20 minutes |
-| Load model             | Loads model into RAM               | 60–90 seconds |
-| First generation       | Initial TTS generation             | 30–60 seconds |
-| Subsequent generations | Faster after warmup                | 15–40 seconds |
+| Step                   | What Happens                                    | Time         |
+| ---------------------- | ----------------------------------------------- | ------------ |
+| Virtual environment    | Creates `venv` folder                           | ~10 seconds  |
+| Install dependencies   | Downloads Python packages                       | 2–5 minutes  |
+| Download model         | Downloads ~500 MB from HuggingFace              | 1–2 minutes  |
+| Download spacy model   | Downloads `en-core-web-sm` (~13 MB) first run   | ~10 seconds  |
+| Load pipeline          | Loads Kokoro KPipeline into RAM                 | ~5 seconds   |
+| First generation       | Initial TTS generation                          | ~11 seconds  |
+| Subsequent generations | Same — non-autoregressive, consistent speed     | ~5–15 seconds |
 
-> **Note:** After first run, startup takes only 30–60 seconds (model is cached).
+> **Note:** After first run, startup takes only ~10 seconds (model and spacy are cached).
 
 ---
 
@@ -365,33 +366,49 @@ docker-compose down
 
 ### Selecting Voices
 
-| Voice    | Gender | Best For               |
-| -------- | ------ | ---------------------- |
-| Vivian   | Female | General narration      |
-| Ryan     | Male   | Professional content   |
-| Elena    | Female | Warm, friendly tone    |
-| Lucas    | Male   | Storytelling           |
-| Isabella | Female | Expressive content     |
-| Marcus   | Male   | Authoritative delivery |
-| Aria     | Female | Soft, gentle narration |
-| Daniel   | Male   | News/formal content    |
-| Sophie   | Female | Conversational style   |
-| Nathan   | Male   | Casual content         |
+**American Female**
 
-### Tone Control
+| Voice ID    | Character  |
+| ----------- | ---------- |
+| `af_heart`  | Heart      |
+| `af_bella`  | Bella      |
+| `af_nicole` | Nicole     |
+| `af_sarah`  | Sarah      |
+| `af_sky`    | Sky        |
 
-| Tone         | Effect                    |
-| ------------ | ------------------------- |
-| **Default**  | Natural, neutral voice    |
-| **Excited**  | Energetic, enthusiastic   |
-| **Sad**      | Melancholic, somber       |
-| **Angry**    | Aggressive, frustrated    |
-| **Whisper**  | Soft, quiet, intimate     |
-| **News**     | Professional anchor style |
-| **Calm**     | Slow, peaceful, relaxed   |
-| **Dramatic** | Theatrical, intense       |
+**American Male**
 
-> **Note:** Tone control requires the 1.7B model. The 0.6B model does not support instructions.
+| Voice ID     | Character  |
+| ------------ | ---------- |
+| `am_adam`    | Adam       |
+| `am_michael` | Michael    |
+| `am_echo`    | Echo       |
+| `am_liam`    | Liam       |
+
+**British Female**
+
+| Voice ID    | Character  |
+| ----------- | ---------- |
+| `bf_emma`   | Emma       |
+| `bf_alice`  | Alice      |
+| `bf_lily`   | Lily       |
+
+**British Male**
+
+| Voice ID     | Character  |
+| ------------ | ---------- |
+| `bm_george`  | George     |
+| `bm_daniel`  | Daniel     |
+| `bm_lewis`   | Lewis      |
+
+### Speed Control
+
+| Preset       | Speed | Effect                     |
+| ------------ | ----- | -------------------------- |
+| **Slow**     | 0.75× | Deliberate, easy to follow |
+| **Normal**   | 1.0×  | Natural default pace       |
+| **Fast**     | 1.25× | Brisk, efficient           |
+| **Very Fast** | 1.5× | Maximum speed              |
 
 ### Downloading Audio
 
@@ -478,11 +495,11 @@ Docker packages the backend with all its dependencies into a portable container 
 ### Dockerfile — Key Design Decisions
 
 ```dockerfile
-FROM python:3.11-slim        # Small base image
-RUN apt-get install gcc sox  # gcc for cryptography (JWT), sox for audio
-COPY requirements.txt .      # ← Copy deps first (layer cache optimization)
-RUN pip install -r ...       # ← Cached if requirements.txt unchanged
-COPY main.py auth.py ./      # ← App code last (changes most often)
+FROM python:3.11-slim             # Small base image
+RUN apt-get install gcc espeak-ng # gcc for cryptography (JWT), espeak-ng for Kokoro G2P
+COPY requirements.txt .           # ← Copy deps first (layer cache optimization)
+RUN pip install -r ...            # ← Cached if requirements.txt unchanged
+COPY main.py auth.py ./           # ← App code last (changes most often)
 CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-7860}
 # Shell form required — JSON array does not expand ${PORT:-7860} env vars
 ```
@@ -491,11 +508,11 @@ CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-7860}
 
 **`0.0.0.0` vs `127.0.0.1`:** Inside a container, `127.0.0.1` only accepts connections from within the container. `0.0.0.0` accepts connections from the host machine — required for Docker.
 
-**Model not baked in:** The Qwen3-TTS model (~3.5 GB) downloads at runtime from Hugging Face Hub. This keeps the image small and matches how Hugging Face Spaces works.
+**Model not baked in:** The Kokoro-82M model (~500 MB) downloads at runtime from Hugging Face Hub. This keeps the image small and matches how Hugging Face Spaces works.
 
 ### docker-compose.yml
 
-The compose file adds a **named volume** (`huggingface_cache`) that persists the downloaded model across container restarts — so you don't re-download 3.5 GB every time.
+The compose file adds a **named volume** (`huggingface_cache`) that persists the downloaded model across container restarts — so you don't re-download the model every time.
 
 ```bash
 # Start (builds on first run)
@@ -518,7 +535,7 @@ docker run -p 8000:8000 --env JWT_SECRET_KEY=your-secret vocably-backend
 
 ### .dockerignore
 
-Excludes from the build context: `qwen_env/`, `.env`, `__pycache__/`, `.git/`
+Excludes from the build context: `venv/`, `.env`, `__pycache__/`, `.git/`, dev scripts (`profile_tts.py` etc.), `testing_audio/`
 
 This prevents secrets from being baked into the image and keeps the build context small.
 
@@ -534,13 +551,13 @@ Set `VITE_TTS_BACKEND_URL` in Render's environment variables to point to your HF
 
 ### Hugging Face Spaces (Backend)
 
-HF Spaces hosts the **backend** (FastAPI + Qwen3-TTS). Upload the `Dockerfile` and HF builds and runs it automatically. Free CPU instances have enough RAM to load the 1.7B model.
+HF Spaces hosts the **backend** (FastAPI + Kokoro-82M). Upload the `Dockerfile` and HF builds and runs it automatically. Free CPU instances have enough RAM to load the model.
 
 The model downloads from HF Hub on first startup. On the free tier, this happens every time the Space restarts (no persistent storage on free CPU tier).
 
 ### Why Split Frontend and Backend?
 
-The frontend is ~200 KB of static files — any free host can serve it. The backend needs 6–8 GB of RAM just to load the model. Render's free tier can't handle it; HF Spaces can. They're connected by API calls with CORS configured to allow the Render frontend URL.
+The frontend is ~200 KB of static files — any free host can serve it. The backend needs RAM and CPU to run inference. Render's free tier can't handle it; HF Spaces can. They're connected by API calls with CORS configured to allow the Render frontend URL.
 
 ### Environment Variables
 
@@ -562,13 +579,13 @@ A Python framework for building web APIs. In Vocably, the frontend sends text + 
 
 ### Endpoints
 
-| Method | Path       | Auth             | Purpose                                      |
-| ------ | ---------- | ---------------- | -------------------------------------------- |
-| GET    | `/`        | Public           | Returns model name, speakers list, auth info |
-| GET    | `/health`  | Public           | Model load status                            |
-| POST   | `/login`   | Public           | Returns JWT on valid credentials             |
-| POST   | `/api/tts` | **JWT required** | Generates speech from text                   |
-| GET    | `/docs`    | Public           | Interactive Swagger UI                       |
+| Method | Path            | Auth             | Purpose                              |
+| ------ | --------------- | ---------------- | ------------------------------------ |
+| GET    | `/health`       | Public           | Model load status                    |
+| POST   | `/login`        | Public           | Returns JWT on valid credentials     |
+| POST   | `/api/tts`      | **JWT required** | Generates speech from text           |
+| GET    | `/api/voices`   | Public           | Returns list of available voices     |
+| GET    | `/docs`         | Public           | Interactive Swagger UI               |
 
 ### Pydantic Models
 
@@ -581,9 +598,8 @@ class LoginRequest(BaseModel):
 
 class TTSRequest(BaseModel):
     text: str
-    voice: str = "Vivian"        # Default if not provided
-    language: str = "Auto"
-    instruct: Optional[str] = None
+    voice: Optional[str] = "af_heart"   # Default if not provided
+    speed: Optional[float] = 1.0        # 0.75 / 1.0 / 1.25 / 1.5
 ```
 
 If the frontend sends data that doesn't match, FastAPI automatically returns 422.
@@ -641,10 +657,10 @@ Runs code at server startup (model load, warmup) and shutdown:
 ```python
 @asynccontextmanager
 async def lifespan(app):
-    load_model()      # Runs BEFORE server accepts requests
-    run_warmup()
-    yield             # Server is live
-    logger.info("Shutting down")  # Runs AFTER server stops
+    _pipeline = KPipeline(lang_code="a")   # Loads Kokoro + spacy model
+    _executor = ThreadPoolExecutor(max_workers=1)
+    yield                                  # Server is live
+    _executor.shutdown(wait=False)         # Runs AFTER server stops
 ```
 
 ### Base64 Audio Transport
@@ -726,42 +742,35 @@ const COLOR_MAP = { purple: "text-purple-600" };
 ### Training vs Inference
 
 - **Training** — gradient-based weight optimization over a dataset; computationally expensive, GPU-bound, done once by the model authors
-- **Inference** — forward pass through fixed weights to generate output; what Vocably does on every TTS request; CPU-feasible for 1.7B parameter models
+- **Inference** — forward pass through fixed weights to generate output; what Vocably does on every TTS request
 
-### Model Parameters (1.7B)
+### Autoregressive vs Non-Autoregressive TTS
+
+- **Autoregressive** (e.g. Qwen3-TTS) — generates audio tokens one at a time, each conditioned on previous tokens; 127+ sequential steps means CPU inference takes minutes
+- **Non-autoregressive** (Kokoro-82M) — generates the full audio representation in a **single forward pass**; no sequential dependency; this is why Kokoro achieves ~11s on CPU vs ~80s for autoregressive models
+
+### Model Parameters (82M)
 
 Each parameter is a floating-point weight that defines the model's learned behavior:
 
-- `float32` → 1.7B × 4 bytes ≈ 6.8 GB in RAM (Vocably uses this on CPU)
-- `float16` → 1.7B × 2 bytes ≈ 3.4 GB (GPU half-precision; not used here)
-
-Model weights are stored in float16/bfloat16 safetensors format on disk (~3.5 GB). When loaded as float32 for CPU inference, they expand to ~6–8 GB in RAM.
+- `float32` → 82M × 4 bytes ≈ 330 MB in RAM
+- Model weights stored in safetensors format on disk (~500 MB total including voices)
 
 ### torch.inference_mode()
 
-`inference_mode()` disables autograd (the computation graph PyTorch builds for backpropagation), reducing memory overhead and improving forward-pass speed during inference:
+`inference_mode()` disables autograd (the computation graph PyTorch builds for backpropagation), reducing memory overhead and improving forward-pass speed during inference.
+
+### ThreadPoolExecutor for Blocking I/O
+
+Kokoro's `KPipeline` is synchronous (blocking). Running it directly in FastAPI's async event loop would block all other requests. `run_in_executor` offloads it to a thread:
 
 ```python
-with torch.inference_mode():
-    wavs, sr = tts_model.generate_custom_voice(text="Hello")
+audio_b64, sr = await asyncio.get_event_loop().run_in_executor(
+    _executor, _generate_sync, text, voice, speed
+)
 ```
 
-### torch.set_num_threads()
-
-Configures PyTorch's intra-op parallelism — number of CPU threads used within a single operation. Setting this to `os.cpu_count()` saturates all logical cores:
-
-```python
-torch.set_num_threads(os.cpu_count())  # e.g. 16 threads on an Intel i5-1340P
-```
-
-### Warmup Generation
-
-PyTorch initializes certain internal components (e.g. MKLDNN primitives, memory allocators) lazily on the first forward pass. A warmup call at startup absorbs this latency before any real user request:
-
-```python
-tts_model.generate_custom_voice(text="Hello.", language="Auto", speaker="Vivian")
-# Runs inside lifespan() with torch.inference_mode() — server not marked ready until this completes
-```
+`max_workers=1` ensures only one generation runs at a time — Kokoro is not thread-safe.
 
 ### Hugging Face Hub
 
@@ -832,16 +841,16 @@ Hundreds of MB. Never commit — npm recreates it from `package-lock.json` with 
 
 A venv is an isolated Python environment with its own packages, preventing dependency clashes between projects.
 
-In Vocably: `backend/qwen_env/`
+In Vocably: `backend/venv/`
 
 ### Key Commands
 
 ```bash
 # Create venv
-python -m venv qwen_env
+python -m venv venv
 
 # Activate (Windows)
-call "qwen_env\Scripts\activate.bat"
+call "venv\Scripts\activate.bat"
 
 # Install from file
 pip install -r requirements.txt
@@ -850,16 +859,17 @@ pip install -r requirements.txt
 pip freeze
 
 # Check specific package
-pip show qwen-tts
+pip show kokoro
 ```
 
 ### requirements.txt
 
 ```
-qwen-tts==0.0.5               # Pinned — always installs this exact version
+kokoro>=0.9.4                      # Kokoro-82M TTS (pulls torch, spacy, misaki)
 fastapi==0.128.0
 uvicorn[standard]==0.40.0
 soundfile==0.13.1
+numpy>=1.20.0
 python-jose[cryptography]==3.3.0   # JWT signing/verification
 passlib[bcrypt]==1.7.4             # Password hashing
 ```
@@ -906,24 +916,20 @@ Pinned versions ensure identical installs everywhere — on your laptop and on H
 
 ### Generation takes too long
 
-- First generation is slowest (30–60 seconds)
-- Try shorter text (under 100 characters for testing)
+- First cold start downloads spacy `en-core-web-sm` (~13 MB) — subsequent runs skip this
+- Typical: ~11s for a 200-character sentence; ~1.7s for short text
+- Try shorter text (under 50 characters for testing)
 - Close other heavy applications to free RAM/CPU
 
 ### High CPU/memory usage
 
 - **Normal:** 60–80% CPU during generation
-- **Normal:** 80–90% memory with model loaded
+- **Normal:** ~1–2 GB RAM with model loaded
 
 ### Docker: `localhost:8000` not responding right after start
 
-- The server waits until the model finishes loading before accepting requests
-- Wait for: `INFO:main:Warmup complete. Server is ready.`
-
-### Docker: SoX warning
-
-- `WARNING:sox:SoX could not be found!` is harmless — just a missing audio tool
-- Fixed in the current `Dockerfile` (sox is installed via apt-get)
+- The server waits until the Kokoro pipeline finishes loading before accepting requests
+- Wait for: `INFO:main:Kokoro ready — server accepting requests.`
 
 ### Audio doesn't play
 
@@ -953,7 +959,7 @@ Pinned versions ensure identical installs everywhere — on your laptop and on H
 | Build frontend for deployment | `npm run build`                        | Project root             |
 | Start backend in Docker       | `docker-compose up --build`            | Project root             |
 | Stop Docker                   | `docker-compose down`                  | Project root             |
-| Activate Python venv          | `qwen_env\Scripts\activate`            | `backend/`               |
+| Activate Python venv          | `venv\Scripts\activate`                | `backend/`               |
 | Install Python packages       | `pip install -r requirements.txt`      | `backend/` (venv active) |
 | Check installed packages      | `pip freeze`                           | `backend/` (venv active) |
 | Check security issues         | `npm audit`                            | Project root             |
@@ -962,7 +968,7 @@ Pinned versions ensure identical installs everywhere — on your laptop and on H
 | Access API docs               | http://localhost:8000/docs             | Browser                  |
 | API health check              | http://localhost:8000/health           | Browser                  |
 | Change voice                  | Dropdown in UI (bottom-left)           | UI                       |
-| Change tone                   | Tone buttons below text area           | UI                       |
+| Change speed                  | Speed selector in UI (bottom-left)     | UI                       |
 | Download audio                | Button next to Play (after generation) | UI                       |
 | Log out                       | "Log out" button (top-right of navbar) | UI                       |
 
@@ -991,7 +997,7 @@ Render CDN  (vocably.onrender.com)
     │                                               (gilfoyle99213-vocably-backend.hf.space)
     │                                               Docker container · CPU Basic · 16 GB RAM
     │                                               FastAPI · Uvicorn · port 7860
-    │                                               Qwen3-TTS model (downloaded at runtime)
+    │                                               Kokoro-82M model (downloaded at runtime)
     │
     │◄── {access_token} / base64 WAV ◄───────────────────────────
 ```
@@ -1000,9 +1006,9 @@ Render CDN  (vocably.onrender.com)
 
 ### Backend — Hugging Face Spaces (Docker)
 
-**Why HF Spaces:** Free tier provides 16 GB RAM and 50 GB disk — enough for the 3.5 GB Qwen3-TTS model. CPU Basic costs nothing. No credit card required. HF Hub also handles model caching natively.
+**Why HF Spaces:** Free tier provides 16 GB RAM and 50 GB disk — more than enough for the ~500 MB Kokoro-82M model. CPU Basic costs nothing. No credit card required. HF Hub also handles model caching natively.
 
-**Why not GCP Cloud Run:** Cloud Run bills per CPU-second during inference. A 3.5 GB model inference request could trigger unexpected charges. HF Spaces is the pragmatic choice for an ML demo — evaluated Cloud Run and made an explicit decision.
+**Why not GCP Cloud Run:** Cloud Run bills per CPU-second during inference. HF Spaces is the pragmatic choice for an ML demo — evaluated Cloud Run and made an explicit decision.
 
 #### What Hugging Face Spaces expects from a Docker container
 
@@ -1016,9 +1022,9 @@ Render CDN  (vocably.onrender.com)
 FROM python:3.11-slim
 # 3.11-slim: minimal attack surface, ~50 MB vs ~900 MB for full image
 
-RUN apt-get install -y gcc sox
+RUN apt-get install -y gcc espeak-ng
 # gcc: compiles cryptography package (required by python-jose for JWT)
-# sox: suppresses SoX audio warning on model startup
+# espeak-ng: system G2P binary required by Kokoro's misaki phonemizer on Linux
 
 RUN useradd -m -u 1000 user
 USER user
@@ -1184,10 +1190,10 @@ Setting `FRONTEND_URL=https://vocably.onrender.com` in HF Spaces secrets allows 
 .env        # VITE_TTS_BACKEND_URL — never committed
 .env.*      # all env variants
 
-node_modules/       # reinstalled by npm install
-dist/               # rebuilt by npm run build
-backend/qwen_env/   # rebuilt by pip install
-__pycache__/        # Python bytecode
+node_modules/    # reinstalled by npm install
+dist/            # rebuilt by npm run build
+backend/venv/    # rebuilt by pip install -r requirements.txt
+__pycache__/     # Python bytecode
 ```
 
 **Standard push workflow:**
@@ -1238,27 +1244,8 @@ The browser enforces CORS (Cross-Origin Resource Sharing) — by default it bloc
 
 ---
 
-**Q: Why does TTS generation take 3–8 minutes on the deployed app? Other platforms are instant.**
+**Q: Why does TTS generation take longer on the deployed app than locally?**
 
-Other platforms (ElevenLabs, Google TTS, etc.) run on cloud GPUs and use heavily optimized or proprietary models — both cost money. Vocably's free tier on Hugging Face Spaces runs on 2 shared vCPUs with no GPU. Qwen3-TTS 1.7B generates audio token-by-token; on a GPU this takes 5–10 seconds, on CPU it takes minutes.
+On the deployed HF Spaces (2 shared vCPUs), Kokoro-82M typically takes 15–30 seconds depending on text length. Locally on a modern laptop (Intel i5-1340P) it runs in ~11 seconds. Both are far faster than the previous Qwen3-TTS backend which took 3–8 minutes on CPU.
 
-The explicit trade-off: zero infrastructure cost vs. inference latency. For a portfolio project this is acceptable — the architecture (JWT auth, Docker containerization, cloud deployment, CORS) is what the project demonstrates, not production-grade latency. Upgrading to an HF Spaces GPU (T4 Small, ~$0.60/hr on-demand) would bring inference to under 10 seconds.
-
----
-
-**Q: I pushed my forked Qwen3-TTS code to GitHub. How does the `Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice` model still work locally?**
-
-The **code** and the **model weights** are two completely separate things:
-
-|                | Code (your fork)                                                                              | Model Weights                                              |
-| -------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| **What**       | Python library (`qwen_tts/`) — defines the model architecture, tokenizer, and inference logic | ~3.5 GB of trained neural network parameters               |
-| **Where**      | Your GitHub repo (`AbdulGani11/Qwen3-TTS`)                                                    | Hugging Face Hub (`Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice`)  |
-| **Local path** | `Vocably/Qwen3-TTS/` (installed via `pip install -e .`)                                       | `~/.cache/huggingface/hub/` (auto-downloaded on first run) |
-
-When `main.py` calls `Qwen3TTSModel.from_pretrained("Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice")`:
-
-1. **Code** — uses your local fork's Python classes (with optimizations) to build the model architecture
-2. **Weights** — downloads from Hugging Face Hub (only once, then cached at `~/.cache/huggingface/hub/`)
-
-Pushing your code to GitHub has **zero effect** on the model weights. They stay cached locally and are always fetched from Hugging Face, not from your repo. Your fork only contains the code that _runs_ the model, not the model itself.
+The explicit trade-off: zero infrastructure cost vs. inference latency. For a portfolio project this is acceptable — the architecture (JWT auth, Docker containerization, cloud deployment, CORS) is what the project demonstrates. Upgrading to an HF Spaces GPU (T4 Small, ~$0.60/hr on-demand) would bring inference under 2 seconds.
