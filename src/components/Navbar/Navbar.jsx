@@ -1,13 +1,12 @@
 import { useState } from "react";
 import FlyoutLink from "./FlyoutLink";
-import { FeaturesContent, DocsContent, AboutContent } from "./NavContent";
+import { FeaturesContent, DocsContent } from "./NavContent";
 import Logo from "./Logo";
 
 // Navigation Configuration
 const NAV_LINKS = [
   { label: "FEATURES", id: "features", Content: FeaturesContent },
   { label: "DOCS", id: "docs", Content: DocsContent },
-  { label: "ABOUT", id: "about", Content: AboutContent },
 ];
 
 /**

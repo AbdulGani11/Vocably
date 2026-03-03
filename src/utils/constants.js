@@ -1,5 +1,5 @@
-export const MAX_TEXT_LENGTH = 3000;
-export const WARNING_THRESHOLD = 2700;
+export const MAX_TEXT_LENGTH = 5000;
+export const WARNING_THRESHOLD = 4500;
 
 // Kokoro-82M voices — grouped by accent
 export const VOICES = [
@@ -32,35 +32,35 @@ export const SPEED_PRESETS = [
     { id: "very_fast", label: "Very Fast", icon: "ri-rocket-2-line",    speed: 1.5  },
 ];
 
-// Use case badges — clickable demos in the headline area
+// Use case badges — faceless YouTube niches, click to load a demo script
 export const USE_CASES = [
     {
-        id: "podcasts",
-        label: "Podcasts",
-        icon: "ri-mic-line",
-        color: "text-purple-500",
-        text: "Welcome to the future of podcasting. In today's episode, we're diving into how artificial intelligence is reshaping the way creators produce audio content. Whether you're a solo voice or a full production team, the tools are finally catching up — and this is just the beginning.",
+        id: "finance",
+        label: "Finance",
+        icon: "ri-money-dollar-circle-line",
+        color: "text-green-600",
+        text: "The average American spends $18,000 a year on things they don't need. That's not a judgment — that's a mathematical fact. But what if redirecting just 20% of that into an index fund, starting today, could make you a millionaire by retirement? In this video, we break down exactly how compound interest works, and why your bank doesn't want you to know.",
     },
     {
-        id: "youtube",
-        label: "YouTube",
-        icon: "ri-youtube-line",
-        color: "text-red-500",
-        text: "Hey everyone, welcome back to the channel! Today I'm showing you something that's going to change how you create content. No mic setup, no takes, no editing. Just type your script, hit play, and you've got a polished voiceover in seconds. Links are down in the description — let's get into it.",
+        id: "ai_tech",
+        label: "AI & Tech",
+        icon: "ri-robot-line",
+        color: "text-violet-600",
+        text: "A new AI model just dropped that nobody expected — and before you scroll past thinking this is just another update, wait. This one changes how software gets built. I've been testing it for 72 hours straight, and by the end of this video you'll understand exactly why every developer is talking about it right now.",
     },
     {
-        id: "audiobooks",
-        label: "Audiobooks",
-        icon: "ri-book-2-line",
-        color: "text-amber-600",
-        text: "Chapter One. The old library stood at the edge of town, its wooden doors creaking open like a whispered invitation. No one had visited in years — until the night a single light flickered behind the frosted glass. She stepped inside, and the dust caught the moonlight like a thousand tiny stars falling in slow motion.",
+        id: "history",
+        label: "History",
+        icon: "ri-ancient-gate-line",
+        color: "text-amber-700",
+        text: "In 1929, a single telegram changed the course of modern history. The man who sent it had no idea that within six months the entire global economy would collapse. This is the untold story of the 48 hours before the Great Crash — and the eerie parallels to what's happening in markets today.",
     },
     {
-        id: "presentations",
-        label: "Presentations",
-        icon: "ri-presentation-line",
-        color: "text-blue-500",
-        text: "Good morning, team. This quarter we saw a 34% increase in user engagement and a 22% reduction in churn. These results reflect the work every one of you has put in. Our roadmap for next quarter includes three major milestones — and based on where we stand today, I'm confident we'll exceed each one.",
+        id: "motivation",
+        label: "Motivation",
+        icon: "ri-fire-line",
+        color: "text-orange-500",
+        text: "You've been telling yourself you'll start tomorrow for 847 days. I know this because that's the average number of days people delay a goal they care about. The difference between the person you are and the person you want to be isn't talent, connections, or money. It's a decision you've been refusing to make.",
     },
 ];
 

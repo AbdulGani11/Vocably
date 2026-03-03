@@ -21,9 +21,39 @@ export const useTTS = () => {
     // Audio availability for download
     const [hasAudio, setHasAudio] = useState(false);
 
+    // Backend readiness: "checking" | "warming" | "ready" | "offline"
+    const [backendStatus, setBackendStatus] = useState("checking");
+
     // Audio element ref and blob URL ref
     const currentAudio = useRef(null);
     const audioBlobUrl = useRef(null);
+
+    // Poll /health until Kokoro pipeline is loaded, then stop
+    useEffect(() => {
+        let intervalId;
+        const poll = async () => {
+            try {
+                const res = await fetch(`${TTS_BACKEND_URL}/health`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.status === "healthy") {
+                        setBackendStatus("ready");
+                        clearInterval(intervalId);
+                    } else {
+                        setBackendStatus("warming");
+                    }
+                } else {
+                    setBackendStatus("offline");
+                }
+            } catch {
+                setBackendStatus("offline");
+            }
+        };
+
+        poll();
+        intervalId = setInterval(poll, 2500);
+        return () => clearInterval(intervalId);
+    }, []);
 
     // Cleanup blob URL on unmount
     useEffect(() => {
@@ -151,6 +181,7 @@ export const useTTS = () => {
         speed,
         setSpeed,
         hasAudio,
+        backendStatus,
         handlePlay,
         handleDownload,
     };

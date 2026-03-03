@@ -1,210 +1,129 @@
-// Shared color map — full static class strings so Tailwind can detect them
-const COLOR_MAP = {
-  purple: { bg: "bg-purple-50 hover:bg-purple-100", icon: "text-purple-600" },
-  blue: { bg: "bg-blue-50 hover:bg-blue-100", icon: "text-blue-600" },
-  green: { bg: "bg-green-50 hover:bg-green-100", icon: "text-green-600" },
-  orange: { bg: "bg-orange-50 hover:bg-orange-100", icon: "text-orange-600" },
-};
-const DEFAULT_COLOR = {
-  bg: "bg-neutral-50 hover:bg-neutral-100",
-  icon: "text-neutral-600",
-};
+// Reusable row: icon + label + one-line description + right chevron
+const NavItem = ({ icon, label, description, href }) => (
+  <a
+    href={href}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-neutral-50 group no-underline"
+  >
+    <i className={`${icon} text-base text-neutral-400 shrink-0`}></i>
+    <div className="flex-1 min-w-0">
+      <div className="text-sm text-neutral-700">{label}</div>
+      <div className="text-xs text-neutral-400 mt-0.5">{description}</div>
+    </div>
+  </a>
+);
 
 /**
- * REUSABLE FEATURE CARD COMPONENT
+ * FEATURES DROPDOWN
  */
-const FeatureCard = ({
-  icon,
-  color,
-  title,
-  description,
-  features,
-  children,
-}) => {
-  const { bg, icon: iconColor } = COLOR_MAP[color] || DEFAULT_COLOR;
-
-  return (
-    <div className={`card-feature ${bg}`}>
-      <div className="text-heading">
-        <i className={`${icon} ${iconColor}`}></i> {title}
-      </div>
-      {description && <p className="feature-card-desc">{description}</p>}
-      {features && (
-        <div className="feature-card-list">
-          {features.map((feature, idx) => (
-            <div key={idx}>• {feature}</div>
-          ))}
-        </div>
-      )}
-      {children}
+export const FeaturesContent = () => (
+  <div className="flex min-w-130">
+    {/* Left: description panel */}
+    <div className="w-44 shrink-0 p-5 border-r border-neutral-100">
+      <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-2">
+        Vocably
+      </p>
+      <h3 className="text-sm font-semibold text-neutral-800 leading-snug">
+        Transform text into lifelike voice
+      </h3>
+      <p className="text-xs text-neutral-500 mt-2 leading-relaxed">
+        Kokoro-82M · 15 voices · JWT-secured · cloud deployed
+      </p>
     </div>
-  );
-};
+
+    {/* Right: item rows */}
+    <div className="flex-1 p-3 flex flex-col">
+      <NavItem
+        icon="ri-mic-line"
+        label="Voice Synthesis"
+        description="Kokoro-82M generates 24 kHz WAV in a single non-autoregressive pass"
+        href="https://huggingface.co/hexgrad/Kokoro-82M"
+      />
+      <NavItem
+        icon="ri-speed-up-line"
+        label="Speed Control"
+        description="Four presets from 0.75× (slow) to 1.5× (fast) for any use case"
+        href="https://vocably.onrender.com"
+      />
+      <NavItem
+        icon="ri-shield-line"
+        label="JWT Secured API"
+        description="HS256 Bearer tokens with 8-hour expiry, stored in sessionStorage"
+        href="https://jwt.io"
+      />
+      <NavItem
+        icon="ri-cloud-line"
+        label="Cloud Deployment"
+        description="Frontend on Render, TTS backend on Hugging Face Spaces"
+        href="https://gilfoyle99213-vocably-backend.hf.space"
+      />
+      <NavItem
+        icon="ri-book-open-line"
+        label="Content Creators"
+        description="Audiobooks, podcasts, YouTube narration, and presentations"
+        href="https://vocably.onrender.com"
+      />
+      <NavItem
+        icon="ri-code-s-slash-line"
+        label="Developers"
+        description="REST API, Docker image, JWT auth — fork-ready on GitHub"
+        href="https://github.com/AbdulGani11/Vocably"
+      />
+    </div>
+  </div>
+);
 
 /**
- * ABOUT CARD VARIANT - Icon on left, compact layout
+ * DOCS DROPDOWN
  */
-const AboutCard = ({ icon, color, title, description }) => {
-  const { bg, icon: iconColor } = COLOR_MAP[color] || DEFAULT_COLOR;
-
-  return (
-    <div className={`card-feature ${bg}`}>
-      <div className="flex items-start gap-2 mb-1">
-        <i className={`${icon} ${iconColor} text-base mt-0.5`}></i>
-        <div>
-          <div className="text-sm font-semibold text-neutral-800">{title}</div>
-          <p className="text-[10px] text-neutral-600 mt-0.5">{description}</p>
-        </div>
-      </div>
+export const DocsContent = () => (
+  <div className="flex min-w-120">
+    {/* Left: description panel */}
+    <div className="w-44 shrink-0 p-5 border-r border-neutral-100">
+      <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-2">
+        Documentation
+      </p>
+      <h3 className="text-sm font-semibold text-neutral-800 leading-snug">
+        Everything you need to build with Vocably
+      </h3>
+      <p className="text-xs text-neutral-500 mt-2 leading-relaxed">
+        API reference, model details, deployment guides.
+      </p>
     </div>
-  );
-};
 
-/**
- * FEATURES DROPDOWN CONTENT
- */
-export const FeaturesContent = () => {
-  return (
-    <div className="w-full p-3 text-left">
-      <h3 className="mb-3 text-label pl-2">Core Features</h3>
-
-      <div className="flex flex-col gap-2">
-        <FeatureCard
-          icon="ri-mic-line"
-          color="purple"
-          title="Natural Voice Synthesis"
-          description="Transform text to lifelike speech"
-          features={[
-            "15 voices — American & British accents",
-            "Speed control (0.75× – 1.5×)",
-            "Downloads as WAV audio",
-          ]}
-        />
-
-        <FeatureCard
-          icon="ri-shield-line"
-          color="blue"
-          title="JWT Authenticated API"
-          description="Secure access to TTS endpoint"
-          features={[
-            "HS256 signed Bearer tokens",
-            "Session-scoped storage",
-            "401 on unauthenticated requests",
-          ]}
-        />
-
-        <FeatureCard
-          icon="ri-cloud-line"
-          color="green"
-          title="Local & Cloud Deployment"
-          description="Run anywhere — local machine or cloud"
-          features={[
-            "Local: start.bat, no Docker needed",
-            "Cloud: Render + Hugging Face Spaces",
-            "Docker containerized backend",
-          ]}
-        />
-      </div>
+    {/* Right: item rows */}
+    <div className="flex-1 p-3 flex flex-col">
+      <NavItem
+        icon="ri-cpu-line"
+        label="Kokoro-82M Model"
+        description="82M-param StyleTTS2 + ISTFTNet vocoder, ~500 MB, CPU-only"
+        href="https://huggingface.co/hexgrad/Kokoro-82M"
+      />
+      <NavItem
+        icon="ri-mic-2-line"
+        label="Voice Catalog"
+        description="15 voices: American & British, Female & Male"
+        href="https://vocably.onrender.com"
+      />
+      <NavItem
+        icon="ri-server-line"
+        label="FastAPI Backend"
+        description="Async Python API with Uvicorn, CORS middleware, Pydantic models"
+        href="https://fastapi.tiangolo.com"
+      />
+      <NavItem
+        icon="ri-lock-line"
+        label="Authentication"
+        description="python-jose validates every /api/tts request via Bearer token"
+        href="https://jwt.io"
+      />
+      <NavItem
+        icon="ri-layout-line"
+        label="Deployment"
+        description="Docker (python:3.11-slim + espeak-ng) on Hugging Face Spaces"
+        href="https://huggingface.co/spaces"
+      />
     </div>
-  );
-};
-
-/**
- * DOCS DROPDOWN CONTENT
- */
-export const DocsContent = () => {
-  return (
-    <div className="w-full p-3 text-left">
-      <h3 className="mb-3 text-label pl-2">Technical Documentation</h3>
-
-      <div className="flex flex-col gap-2">
-        <FeatureCard
-          icon="ri-cpu-line"
-          color="blue"
-          title="Kokoro-82M Model"
-          description="Non-autoregressive TTS — fast CPU inference"
-          features={[
-            "82M params, ~11s for 10s of audio",
-            "StyleTTS2 + ISTFTNet architecture",
-            "~500 MB, loads in ~3s",
-          ]}
-        />
-
-        <FeatureCard
-          icon="ri-mic-line"
-          color="purple"
-          title="Available Voices"
-          description="15 voices across two accents"
-        >
-          <div className="feature-card-list">
-            <div>
-              • <strong>American Female:</strong> Heart, Bella, Nicole, Sarah, Sky
-            </div>
-            <div>
-              • <strong>American Male:</strong> Adam, Michael, Echo, Liam
-            </div>
-            <div>
-              • <strong>British Female:</strong> Emma, Alice, Lily
-            </div>
-            <div>
-              • <strong>British Male:</strong> George, Daniel, Lewis
-            </div>
-          </div>
-        </FeatureCard>
-
-        <FeatureCard
-          icon="ri-speed-up-line"
-          color="green"
-          title="Speed Control"
-          description="Adjust playback rate to taste"
-          features={[
-            "4 presets: Slow, Normal, Fast, Very Fast",
-            "Range: 0.75× to 1.5×",
-            "Useful for accessibility & learning",
-          ]}
-        />
-      </div>
-    </div>
-  );
-};
-
-/**
- * ABOUT DROPDOWN CONTENT
- */
-export const AboutContent = () => {
-  return (
-    <div className="w-full p-3 text-left">
-      <h3 className="mb-3 text-label pl-2">Built For</h3>
-
-      <div className="flex flex-col gap-2">
-        <AboutCard
-          icon="ri-book-open-line"
-          color="orange"
-          title="Content Creators"
-          description="Audiobooks, tutorials, presentations, marketing content"
-        />
-
-        <AboutCard
-          icon="ri-code-s-slash-line"
-          color="blue"
-          title="Developers"
-          description="Voice assistants, chatbots, accessibility tooling"
-        />
-
-        <AboutCard
-          icon="ri-briefcase-line"
-          color="green"
-          title="Businesses"
-          description="Training materials, announcements, accessibility solutions"
-        />
-
-        <AboutCard
-          icon="ri-star-line"
-          color="purple"
-          title="Why Vocably?"
-          description="JWT-secured API, Docker containerized, cloud deployed — production-grade TTS portfolio project"
-        />
-      </div>
-    </div>
-  );
-};
+  </div>
+);

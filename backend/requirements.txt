@@ -14,3 +14,18 @@ numpy>=1.20.0
 # Authentication — JWT signing and password utilities
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+
+# HTTP client — used by /api/clean to call Ollama locally
+httpx==0.28.1
+
+# PDF extraction — digital text (pymupdf) + scanned fallback (tesseract)
+pymupdf==1.25.3
+pytesseract==0.3.13
+Pillow==11.2.1
+python-multipart==0.0.20
+
+# Subtitle parsers — deterministic SRT/VTT text extraction (no LLM needed)
+srt==3.5.3
+
+# YouTube transcript extraction — scrapes closed-caption data directly from YouTube servers
+youtube-transcript-api>=1.2.4

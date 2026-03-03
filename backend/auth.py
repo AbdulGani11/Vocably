@@ -10,9 +10,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 
-# ---------------------------------------------------------------------------
 # Configuration — override via environment variables for production
-# ---------------------------------------------------------------------------
 
 # Secret key for signing JWTs.
 # If not provided, a secure random key is generated per server session.
@@ -22,22 +20,16 @@ SECRET_KEY: str = os.environ.get("JWT_SECRET_KEY", secrets.token_hex(32))
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 8  # Token valid for one working day
 
-# ---------------------------------------------------------------------------
 # Hardcoded local credentials (for demo / local use only)
 # Override via environment variables: VOCABLY_USERNAME, VOCABLY_PASSWORD
-# ---------------------------------------------------------------------------
 DEMO_USERNAME: str = os.environ.get("VOCABLY_USERNAME", "vocably")
 DEMO_PASSWORD: str = os.environ.get("VOCABLY_PASSWORD", "vocably2026")
 
-# ---------------------------------------------------------------------------
 # Bearer token extractor
-# ---------------------------------------------------------------------------
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-# ---------------------------------------------------------------------------
 # Token creation
-# ---------------------------------------------------------------------------
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Create a signed JWT with an expiry timestamp."""
     to_encode = data.copy()
@@ -48,9 +40,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-# ---------------------------------------------------------------------------
 # Credential validation
-# ---------------------------------------------------------------------------
 def validate_credentials(username: str, password: str) -> bool:
     """
     Validate username and password against the configured credentials.
@@ -63,9 +53,7 @@ def validate_credentials(username: str, password: str) -> bool:
     return username == DEMO_USERNAME and password == DEMO_PASSWORD
 
 
-# ---------------------------------------------------------------------------
-# FastAPI dependency — protect endpoints with JWT verification
-# ---------------------------------------------------------------------------
+# FastAPI dependFency — protect endpoints with JWT verification
 def verify_token(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
 ) -> dict:

@@ -32,6 +32,6 @@ TECH_STACK.md
 VOCABLY_GUIDE.md
 Untitled*.md
 
-# ── Generated audio (benchmarks, tests) ──────────────────────────────────
-backend/testing_audio/
-*.wav
+# ── Documents folder — ignore all except the main technical reference ─────────
+Documents/*
+!Documents/documentation.md
