@@ -1,14 +1,3 @@
-/**
- * Login.jsx — Authentication gate for Vocably
- *
- * Minimal login form that matches the existing Vocably design system.
- * Calls useAuth.login() → POST /login → stores JWT in sessionStorage.
- *
- * Default credentials (local demo):
- *   username: vocably
- *   password: vocably2026
- */
-
 import { useState } from "react";
 
 const Login = ({ onLogin, authError, isLoggingIn }) => {
@@ -25,7 +14,6 @@ const Login = ({ onLogin, authError, isLoggingIn }) => {
   return (
     <div className="flex h-dvh w-full items-center justify-center bg-linear-to-br from-neutral-50 via-amber-50/30 to-white px-6">
       <div className="w-full max-w-sm animate-fade-in-up">
-        {/* Logo / Title */}
         <div className="mb-8 text-center">
           <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">
             Vocably
@@ -35,10 +23,8 @@ const Login = ({ onLogin, authError, isLoggingIn }) => {
           </p>
         </div>
 
-        {/* Card */}
         <div className="rounded-2xl bg-white shadow-2xl shadow-orange-900/10 border border-white/60 p-8">
           <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-            {/* Username */}
             <div className="flex flex-col gap-1.5">
               <label
                 htmlFor="username"
@@ -58,7 +44,6 @@ const Login = ({ onLogin, authError, isLoggingIn }) => {
               />
             </div>
 
-            {/* Password */}
             <div className="flex flex-col gap-1.5">
               <label
                 htmlFor="password"
@@ -90,7 +75,6 @@ const Login = ({ onLogin, authError, isLoggingIn }) => {
               </div>
             </div>
 
-            {/* Error message */}
             {authError && (
               <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-600">
                 <i className="ri-error-warning-line mt-0.5 shrink-0" />
@@ -98,7 +82,6 @@ const Login = ({ onLogin, authError, isLoggingIn }) => {
               </div>
             )}
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={isLoggingIn || !username.trim() || !password.trim()}
@@ -119,7 +102,6 @@ const Login = ({ onLogin, authError, isLoggingIn }) => {
           </form>
         </div>
 
-        {/* Hint */}
         <p className="mt-5 text-center text-xs text-neutral-400">
           JWT-secured · Local & cloud deployment · Private by design
         </p>

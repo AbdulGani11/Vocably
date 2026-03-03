@@ -1,4 +1,3 @@
-// Reusable row: icon + label + one-line description + right chevron
 const NavItem = ({ icon, label, description, href }) => (
   <a
     href={href}
@@ -14,12 +13,8 @@ const NavItem = ({ icon, label, description, href }) => (
   </a>
 );
 
-/**
- * FEATURES DROPDOWN
- */
 export const FeaturesContent = () => (
   <div className="flex min-w-130">
-    {/* Left: description panel */}
     <div className="w-44 shrink-0 p-5 border-r border-neutral-100">
       <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-2">
         Vocably
@@ -32,7 +27,6 @@ export const FeaturesContent = () => (
       </p>
     </div>
 
-    {/* Right: item rows */}
     <div className="flex-1 p-3 flex flex-col">
       <NavItem
         icon="ri-mic-line"
@@ -74,12 +68,8 @@ export const FeaturesContent = () => (
   </div>
 );
 
-/**
- * DOCS DROPDOWN
- */
 export const DocsContent = () => (
   <div className="flex min-w-120">
-    {/* Left: description panel */}
     <div className="w-44 shrink-0 p-5 border-r border-neutral-100">
       <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-2">
         Documentation
@@ -92,7 +82,6 @@ export const DocsContent = () => (
       </p>
     </div>
 
-    {/* Right: item rows */}
     <div className="flex-1 p-3 flex flex-col">
       <NavItem
         icon="ri-cpu-line"

@@ -3,28 +3,19 @@ import FlyoutLink from "./FlyoutLink";
 import { FeaturesContent, DocsContent } from "./NavContent";
 import Logo from "./Logo";
 
-// Navigation Configuration
 const NAV_LINKS = [
   { label: "FEATURES", id: "features", Content: FeaturesContent },
   { label: "DOCS", id: "docs", Content: DocsContent },
 ];
 
-/**
- * NAVBAR COMPONENT
- * onLogout — optional callback; when provided a logout button is shown
- */
 const Navbar = ({ onLogout }) => {
-  // Track whether mobile menu is open
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  // Track which accordion section is expanded
   const [expandedSection, setExpandedSection] = useState(null);
 
-  // Toggle accordion section
   const toggleSection = (section) => {
     setExpandedSection(expandedSection === section ? null : section);
   };
 
-  // Mobile menu CSS classes
   const mobileMenuClasses = mobileMenuOpen
     ? "opacity-100 translate-y-0 visible pointer-events-auto"
     : "opacity-0 -translate-y-2 invisible pointer-events-none";
@@ -32,10 +23,8 @@ const Navbar = ({ onLogout }) => {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-4 w-full bg-white/80 backdrop-blur-sm">
       <div className="max-w-7xl mx-auto relative flex items-center justify-between">
-        {/* 1. LEFT: Logo Section */}
         <Logo />
 
-        {/* 2. CENTER: Navigation Links (Absolute Center) */}
         <div className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center gap-6 z-10">
           {NAV_LINKS.map((item) => (
             <FlyoutLink key={item.label} FlyoutContent={item.Content}>
@@ -44,7 +33,6 @@ const Navbar = ({ onLogout }) => {
           ))}
         </div>
 
-        {/* 3. RIGHT: Logout Button (shown only after login) */}
         {onLogout && (
           <button
             onClick={onLogout}
@@ -57,7 +45,6 @@ const Navbar = ({ onLogout }) => {
           </button>
         )}
 
-        {/* Mobile Menu Icon */}
         <button
           className="lg:hidden text-neutral-800 z-20 ml-auto"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -69,11 +56,9 @@ const Navbar = ({ onLogout }) => {
         </button>
       </div>
 
-      {/* Mobile Menu Panel - Native CSS Transitions */}
       <div
         className={`fixed inset-0 bg-white z-60 lg:hidden flex flex-col h-screen transition-all duration-300 ease-in-out ${mobileMenuClasses}`}
       >
-        {/* Mobile Header with Logo and Close */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-100">
           <Logo />
           <button
@@ -87,7 +72,6 @@ const Navbar = ({ onLogout }) => {
           </button>
         </div>
 
-        {/* Navigation Links - Accordion Style */}
         <div className="flex-1 overflow-y-auto px-6 py-6 min-h-0">
           <div className="flex flex-col gap-0">
             {NAV_LINKS.map((item) => (

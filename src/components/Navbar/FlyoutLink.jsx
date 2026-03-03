@@ -1,14 +1,8 @@
 import { useState } from "react";
 
-/**
- * FLYOUT LINK COMPONENT
- * Renders a navigation link with an animated dropdown menu.
- */
 const FlyoutLink = ({ children, FlyoutContent }) => {
-  // Track whether dropdown is currently open
   const [open, setOpen] = useState(false);
 
-  // Determine classes based on state
   const flyoutClasses = open ? "flyout-visible" : "flyout-hidden";
 
   return (
@@ -26,12 +20,6 @@ const FlyoutLink = ({ children, FlyoutContent }) => {
         ></i>
       </span>
 
-      {/* 
-        Native CSS Transition approach:
-        Always render, just toggle visibility/opacity.
-        "top-full" starts right at the bottom of the parent (no gap).
-        "pt-4" creates the visual space (bridge) so mouse doesn't "leave".
-      */}
       <div
         className={`absolute left-1/2 top-full -translate-x-1/2 pt-4 flyout-container ${flyoutClasses}`}
       >

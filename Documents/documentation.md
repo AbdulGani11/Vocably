@@ -25,6 +25,7 @@ A single reference that covers everything about Vocably: what it is, why every t
 17. [Performance Notes](#17-performance-notes)
 18. [Quick Reference — Commands](#18-quick-reference--commands)
 19. [FAQ](#19-faq)
+20. [Code Reference — Module Design Notes](#20-code-reference--module-design-notes)
 
 ---
 
@@ -472,7 +473,7 @@ After the first run, startup takes ~15 seconds (model and spacy are cached local
 1. Open http://localhost:5173 → Login page appears
 2. Sign in with `vocably` / `vocably2026`
 3. Wait for the warming-up banner to disappear (Play button goes from grey to black)
-4. Type or paste text — up to 5000 characters
+4. Type or paste text — up to 10,000 characters
 5. Select a voice and speed using the selectors in the bottom-left
 6. Click the Play button (black circle)
 7. Audio plays automatically; click again to stop
@@ -650,7 +651,7 @@ _ollama_clean(parsed, prompt=_FILLER_ONLY_PROMPT)  [Stage 2: LLM]
   - Returns cleaned text
     │
     ▼
-setText(cleaned.slice(0, 5000))  ← loaded into textarea
+setText(cleaned.slice(0, 10000))  ← loaded into textarea
 ```
 
 ### Format detection
@@ -765,7 +766,7 @@ _ollama_clean(raw_text, prompt=_CLEAN_SYSTEM_PROMPT)   [full clean — not fille
   - _CLEAN_SYSTEM_PROMPT fixes structure, punctuation, and removes fillers
     │
     ▼
-setText(cleaned.slice(0, 5000))  ← loaded into textarea
+setText(cleaned.slice(0, 10000))  ← loaded into textarea
 ```
 
 **Why `_CLEAN_SYSTEM_PROMPT` instead of `_FILLER_ONLY_PROMPT`:** Auto-generated YouTube captions are a stream of lower-case words without sentence boundaries or punctuation. Unlike a parsed SRT file (which has clean prose), this text needs the full reformat — not just filler removal.
@@ -1469,5 +1470,253 @@ The second request is queued. `ThreadPoolExecutor(max_workers=1)` ensures only o
 **Q: Why does TTS generation take longer on HF Spaces than locally?**
 
 HF Spaces free tier provides 2 shared vCPUs. "Shared" means the physical CPU cores are time-multiplexed with other tenants' workloads. On a dedicated Intel i5-1340P (4P + 8E cores), Kokoro has full, uncontested access to all cores. On HF Spaces, it gets a fraction of two cores. This results in roughly 2× longer generation time.
+
+---
+
+## 20. Code Reference — Module Design Notes
+
+This section documents implementation decisions that live closest to the code itself. It covers the "why" behind specific constants, patterns, data shapes, and component design choices.
+
+---
+
+### 20.1 `backend/main.py` — Global State
+
+Three module-level variables hold the server's shared state:
+
+```python
+_pipeline = None        # Kokoro KPipeline — loaded once at startup, shared across requests
+_executor = None        # ThreadPoolExecutor(max_workers=1) — Kokoro is not thread-safe
+_ready    = False       # True only after pipeline load AND voice pre-warm are both complete
+```
+
+`_ready` is a separate flag from `_pipeline is not None` precisely because the pipeline can exist but still be performing the voice pre-warm. The `/health` endpoint checks `_ready`, not `_pipeline`, so clients never receive `"healthy"` until the server can genuinely serve its first request without extra latency.
+
+---
+
+### 20.2 Regex Patterns — Annotated
+
+**`_TIMESTAMP_RE`** uses Python's verbose (`re.VERBOSE`) mode, which ignores whitespace and allows inline comments inside the pattern string itself. The two alternatives it matches are:
+
+```
+\[?\(?\d{1,2}:\d{2}(?::\d{2})?(?:[,\.]\d+)?\]?\)?
+```
+Matches timestamps in any of these forms:
+- `[00:01:23]` — bracket-wrapped HH:MM:SS (YouTube SRT)
+- `(1:23)` — paren-wrapped M:SS
+- `00:01:23,456` — SRT timestamp with comma-milliseconds
+- `00:01:23.456` — VTT timestamp with dot-milliseconds
+
+```
+\[\d+\]
+```
+Matches subtitle sequence numbers like `[1]`, `[12]` — numeric-only bracket content that appears at the start of each SRT/VTT cue.
+
+**`_SPEAKER_LABEL_RE`** is intentionally conservative. It only strips the unambiguous `Speaker N:` / `SPEAKER 01:` pattern. It does **not** strip named labels like `Dr. Chen:` or `John:` because a colon after a name is common in legitimate prose (e.g., "Note: this is important"). Stripping named labels would corrupt interview transcripts. The conservative pattern keeps content intact at the cost of leaving some speaker labels in place when the format is ambiguous.
+
+**`_TAG_RE`** (`<[^>]+>`) strips inline HTML tags from subtitle cue content — bold `<b>`, italic `<i>`, underline `<u>`, and any other HTML tags that subtitle authoring tools sometimes embed.
+
+---
+
+### 20.3 Pydantic Model Field Notes
+
+Two response fields encode operational state for the frontend:
+
+| Field             | Model           | Type   | Meaning                                                            |
+| ----------------- | --------------- | ------ | ------------------------------------------------------------------ |
+| `available: bool` | `CleanResponse` | bool   | `False` if Ollama was unreachable — text loaded without AI cleanup |
+| `available: bool` | `YouTubeResponse` | bool | Same — `False` if Ollama was down during transcript cleaning       |
+| `method: str`     | `PDFResponse`   | str    | `"digital"` (pymupdf text layer) or `"ocr"` (Tesseract fallback)  |
+
+The frontend uses `available` to decide whether to show a success notice ("cleaned with AI") or a warning notice ("Ollama unavailable, loaded as-is"). The `method` field drives the PDF notice text: "PDF extracted (3p, OCR)" vs "PDF extracted (3p, digital)".
+
+---
+
+### 20.4 Speed Clamping
+
+The `speed` parameter in `/api/tts` is clamped before being passed to Kokoro:
+
+```python
+speed = max(0.5, min(2.0, request.speed or 1.0))
+```
+
+This guards against out-of-range values that would cause Kokoro to behave unexpectedly (very low speeds produce near-silence; very high speeds cause audio artifacts). `0.5–2.0` is the safe operating range for Kokoro's StyleTTS2 model.
+
+---
+
+### 20.5 Lazy Imports
+
+Three libraries are imported inside their respective functions rather than at module load time:
+
+- `fitz` (pymupdf) — imported inside `_extract_pdf()`
+- `pytesseract` + `PIL` — imported inside `_extract_pdf()`
+- `youtube_transcript_api` — imported inside `youtube_transcript()`
+- `srt` — imported inside `_parse_srt()`
+
+This is intentional: it keeps startup fast and allows the server to run without these optional dependencies installed. If a user calls an endpoint that requires one of them and it is not installed, they receive a `501 Not Implemented` error with a `pip install` command to fix it.
+
+---
+
+### 20.6 YouTube Transcript API — v1.x Notes
+
+The `youtube-transcript-api>=1.2.4` API changed from the `0.x` style in two important ways:
+
+1. **Instantiation required:** `YouTubeTranscriptApi().fetch(video_id)` (instance method), not `YouTubeTranscriptApi.get_transcript(video_id)` (class method from v0.x).
+2. **Snippet objects, not dicts:** Each element in the returned iterable is an object with `.text`, `.start`, and `.duration` attributes — not a plain dict with string keys.
+
+The text assembly step reflects this:
+
+```python
+raw_text = " ".join(
+    s.text.replace("\n", " ").strip()
+    for s in result
+    if s.text.strip()
+)
+```
+
+`s.text.replace("\n", " ")` collapses line breaks that appear inside individual caption snippets before joining them all with spaces.
+
+---
+
+### 20.7 `_extract_video_id` — URL Patterns
+
+The function recognises five YouTube URL formats via separate regex patterns:
+
+| Pattern                          | Matches URL format                    |
+| -------------------------------- | ------------------------------------- |
+| `(?:v=)([a-zA-Z0-9_-]{11})`      | `youtube.com/watch?v=ID`              |
+| `(?:youtu\.be/)([a-zA-Z0-9_-]{11})` | `youtu.be/ID` (short link)        |
+| `(?:embed/)([a-zA-Z0-9_-]{11})` | `youtube.com/embed/ID` (embedded player) |
+| `(?:shorts/)([a-zA-Z0-9_-]{11})` | `youtube.com/shorts/ID`              |
+| `(?:live/)([a-zA-Z0-9_-]{11})`   | `youtube.com/live/ID`                |
+
+All YouTube video IDs are exactly 11 characters from the alphabet `[a-zA-Z0-9_-]`. The function returns `None` if no match is found, which the endpoint translates into an HTTP 400 with a clear error message.
+
+---
+
+### 20.8 `backend/auth.py` — Design Decisions
+
+**`SECRET_KEY` generation:**
+
+```python
+SECRET_KEY: str = os.environ.get("JWT_SECRET_KEY", secrets.token_hex(32))
+```
+
+If `JWT_SECRET_KEY` is not set as an environment variable, a new 32-byte random key is generated at server startup. This means **all existing tokens are invalidated on every server restart** — intentional for security. In production (especially on Hugging Face Spaces), always set `JWT_SECRET_KEY` as a persistent environment variable so tokens survive container restarts.
+
+**`ACCESS_TOKEN_EXPIRE_HOURS = 8`** — sized to cover one working day. A user who logs in at the start of their session stays authenticated without being interrupted.
+
+**Credential override:**
+
+```python
+DEMO_USERNAME = os.environ.get("VOCABLY_USERNAME", "vocably")
+DEMO_PASSWORD = os.environ.get("VOCABLY_PASSWORD", "vocably2026")
+```
+
+The defaults (`vocably` / `vocably2026`) are intentionally visible in the source code for local development. In production, override both via environment variables. The JWT flow itself is production-grade regardless of the credential storage method.
+
+**`validate_credentials` design note:** In a production system this would hash the input password with bcrypt and compare against a stored hash — never storing or comparing plaintext passwords. For this local demo, a direct string comparison is used. The JWT authentication layer on top provides the actual security boundary.
+
+---
+
+### 20.9 `src/utils/constants.js` — Data Shapes
+
+**`SPEED_PRESETS`** replaces a "Tone" selector that existed in the Qwen3-TTS era. Qwen3-TTS accepted natural language tone instructions ("speak enthusiastically"). Kokoro-82M does not support tone instructions — only a numeric speed multiplier. The preset labels (Slow, Normal, Fast, Very Fast) map to speed values (0.75, 1.0, 1.25, 1.5).
+
+**`USE_CASES`** are demo script badges designed for faceless YouTube content niches (Finance, AI & Tech, History, Motivation). Clicking a badge loads a pre-written hook script into the textarea, letting new users immediately try the app with realistic content.
+
+---
+
+### 20.10 `src/hooks/useAuth.js` — Token Lifecycle
+
+**`sessionStorage` over `localStorage`:** Tokens stored in `localStorage` survive browser restarts and persist until explicitly deleted — if a user walks away from their machine with a tab open, the token remains accessible indefinitely. `sessionStorage` clears automatically when the browser tab is closed, limiting the token's effective lifetime to the active session.
+
+**30-second login timeout:**
+
+```js
+const controller = new AbortController();
+const timeoutId = setTimeout(() => controller.abort(), 30000);
+```
+
+Hugging Face Spaces free tier has a "cold start" — the container is put to sleep after idle periods and can take 30–60 seconds to wake up. Without a timeout, a login attempt against a cold-starting backend would hang silently until the browser's default timeout (typically 2+ minutes). The 30-second `AbortError` fires a clear "Server not responding" message instead.
+
+**Error classification in `login()`:**
+
+| Error condition                        | Message shown in UI                                                        |
+| -------------------------------------- | -------------------------------------------------------------------------- |
+| `AbortError` (30s timeout)             | "Server not responding. Make sure the backend is running and try again."   |
+| `Failed to fetch` / `NetworkError`     | "Cannot connect to server. Check your connection and try again."           |
+| All other errors (e.g. 401 from server) | The server's `detail` message, or "Login failed. Please try again."      |
+
+**`getToken()`** reads the stored JWT from `sessionStorage` and returns it for use in `Authorization: Bearer` headers in API calls. Returns `null` if the user is not authenticated.
+
+---
+
+### 20.11 `src/hooks/useTTS.js` — State Machine
+
+`backendStatus` is a four-state string enum:
+
+| Value       | Meaning                                                       | UI shown                          |
+| ----------- | ------------------------------------------------------------- | --------------------------------- |
+| `"checking"` | First poll not yet complete — status unknown                  | Play button greyed out            |
+| `"warming"`  | Backend responding but `_ready` is `false`                   | Amber "warming up" banner         |
+| `"ready"`    | `/health` returned `{"status": "healthy"}`                    | Play button enabled               |
+| `"offline"`  | Network error or non-2xx response from `/health`              | Red "offline" banner              |
+
+Once `"ready"` is reached, the health polling interval is cleared — no further polls are made. The transition to `"offline"` can happen at any time if the backend becomes unreachable (the interval only clears on `"ready"`, not on error).
+
+---
+
+### 20.12 `src/pages/Hero.jsx` — Component Structure
+
+**`VOICE_ITEMS` and `SPEED_ITEMS`** are computed from the `VOICES` and `SPEED_PRESETS` constants and defined at module level, outside the `Hero` component. This ensures they are created once when the module loads — not on every render of the component. Since they reference only imported constants (no component state), they never need to be re-derived.
+
+**File input reset (`e.target.value = ""`**): After a file is selected and processed, the input element's value is cleared. This allows the same file to be re-uploaded immediately — without this reset, selecting the same file a second time would not trigger the `onChange` event because the browser sees no change in the input's value.
+
+**`cleanNotice` shape:** `{ type: "success" | "warn", message: string }`. The `type` field drives the visual styling (green border for success, amber border for warning). `null` means no notice is shown.
+
+---
+
+### 20.13 `src/components/Hero/DropupSelector.jsx` — Props API
+
+`DropupSelector` is a generic reusable component used for both the Voice and Speed selectors. Its props:
+
+| Prop            | Type            | Description                                                          |
+| --------------- | --------------- | -------------------------------------------------------------------- |
+| `items`         | `{ value, label, icon? }[]` | List of selectable options                             |
+| `selectedValue` | `any`           | The currently selected value (compared with `item.value`)            |
+| `onChange`      | `(value) => void` | Called with the new value when the user picks an option            |
+| `label`         | `string`        | Micro-label shown above the selected option name (e.g. "Voice")      |
+| `triggerIcon`   | `string`        | Remix Icon class used in the trigger button when `item.icon` is absent |
+
+The **click-outside close** behaviour uses `document.addEventListener("mousedown", ...)` rather than `"click"` to fire before the click event propagates to child elements — this prevents edge cases where clicking inside the dropdown simultaneously triggers both a selection and the outside-click close handler.
+
+The component opens **upward** (`bottom-full mb-2`) rather than downward because the selectors sit in the footer row of the card, and a downward dropdown would overflow the card's bottom edge.
+
+---
+
+### 20.14 `FlyoutLink.jsx` — The Hover Bridge Technique
+
+The flyout panel uses `top-full pt-4` to create an invisible gap between the trigger link and the dropdown panel:
+
+```jsx
+<div className="absolute left-1/2 top-full -translate-x-1/2 pt-4 flyout-container">
+```
+
+- `top-full` places the dropdown container's top edge at the bottom of the trigger element, with zero gap.
+- `pt-4` (16 px of padding-top) creates visible space between the trigger text and the dropdown box.
+
+Without this padding, moving the mouse from the trigger link diagonally toward the dropdown panel would cross a gap where neither element is hovered — firing `onMouseLeave` and closing the panel before the cursor arrives. The padding creates a continuous hover region (a "bridge") that keeps `onMouseEnter` active during diagonal movement. The panel's visual appearance uses the 16 px of padding as whitespace, so users perceive a gap — but the hover area is actually continuous.
+
+---
+
+### 20.15 `Navbar.jsx` — Layout Approach
+
+The desktop navbar uses an absolute-center approach for the navigation links:
+
+```jsx
+<div className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 ...">
+```
+
+This positions the links at the exact geometric center of the navbar regardless of the widths of the Logo (left) and Logout button (right). A `flex justify-center` approach would be off-center if the left and right elements have different widths. The `NAV_LINKS` array drives both the desktop flyout navigation and the mobile accordion — the same data source renders both layouts.
 
 ---

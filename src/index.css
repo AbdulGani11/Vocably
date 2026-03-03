@@ -1,44 +1,28 @@
 @import "tailwindcss";
 
 @theme {
-  /* This extends the spacing scale, making w-150, p-150, etc. available */
   --spacing-100: 25rem;
-  /* 400px */
   --spacing-150: 37.5rem;
-  /* 600px */
   --spacing-187-5: 46.875rem;
-  /* 750px */
 }
-
-/* 
-  SEMANTIC COMPONENT CLASSES 
-  Extracting common patterns to clean up JSX
-*/
 
 @layer components {
 
-  /* --- CARDS --- */
   .card-feature {
     display: flex;
     flex-direction: column;
     border-radius: 0.75rem;
-    /* rounded-xl */
     padding: 0.75rem;
-    /* p-3 */
     transition: background-color 0.2s;
     cursor: pointer;
   }
 
-  /* --- NAVIGATION --- */
   .nav-link {
     font-size: 0.75rem;
-    /* text-xs */
     line-height: 1rem;
     font-weight: 500;
-    /* font-medium */
     text-transform: uppercase;
     letter-spacing: 0.025em;
-    /* tracking-wide */
     color: var(--color-neutral-600);
     transition: color 0.2s;
     text-decoration: none;
@@ -48,30 +32,23 @@
     color: var(--color-neutral-900);
   }
 
-  /* --- TYPOGRAPHY --- */
   .text-label {
     font-size: 0.75rem;
-    /* text-xs */
     line-height: 1rem;
     font-weight: 500;
-    /* font-medium */
     text-transform: uppercase;
     color: var(--color-neutral-400);
   }
 
   .text-heading {
     font-weight: 600;
-    /* font-semibold */
     color: var(--color-neutral-800);
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    /* gap-2 */
     margin-bottom: 0.25rem;
-    /* mb-1 */
   }
 
-  /* --- ICON CIRCLES --- */
   .icon-circle {
     display: flex;
     align-items: center;
@@ -79,7 +56,6 @@
     border-radius: 9999px;
   }
 
-  /* --- DROPDOWN PANELS --- */
   .dropdown-panel {
     position: absolute;
     background-color: white;
@@ -105,7 +81,6 @@
     pointer-events: auto;
   }
 
-  /* --- FEATURE CARD TEXT --- */
   .feature-card-desc {
     font-size: 0.75rem;
     line-height: 1rem;
@@ -123,7 +98,6 @@
     margin-bottom: 0.125rem;
   }
 
-  /* --- ANIMATIONS --- */
   @keyframes fadeInUp {
     from {
       opacity: 0;
@@ -149,15 +123,12 @@
   .animate-fade-in-up {
     animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     opacity: 0;
-    /* Start hidden */
   }
 
   .key-active-pop {
     animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
   }
 
-
-  /* Dropdown/Flyout specific */
   .flyout-container {
     transition: opacity 0.2s ease-out, transform 0.2s ease-out, visibility 0.2s;
   }
@@ -176,7 +147,6 @@
     pointer-events: auto;
   }
 
-  /* Accordion (Grid Trick) */
   .accordion-grid {
     display: grid;
     grid-template-rows: 0fr;
@@ -191,9 +161,6 @@
     overflow: hidden;
   }
 
-  /* --- HERO ENHANCEMENTS --- */
-
-  /* Use Case Badges */
   .use-case-badge {
     display: inline-flex;
     align-items: center;
@@ -218,7 +185,6 @@
     font-size: 0.875rem;
   }
 
-  /* Example Selector */
   .example-pill {
     display: inline-flex;
     align-items: center;

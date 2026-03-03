@@ -11,7 +11,6 @@ import DropupSelector from "../components/Hero/DropupSelector";
 
 const TTS_BACKEND_URL = import.meta.env.VITE_TTS_BACKEND_URL || "http://localhost:8000";
 
-// Selector items — defined outside the component so they aren't recreated on every render
 const VOICE_ITEMS = VOICES.map((v) => ({ value: v.value, label: v.label }));
 const SPEED_ITEMS = SPEED_PRESETS.map((s) => ({
   value: s.speed,
@@ -38,18 +37,12 @@ const Hero = () => {
 
   const backendReady = backendStatus === "ready";
 
-  // Track which use case is selected
   const [selectedUseCase, setSelectedUseCase] = useState(null);
-
-  // Track textarea expanded state
   const [isExpanded, setIsExpanded] = useState(false);
-
-  // File upload + AI cleanup state
   const [isCleaning, setIsCleaning] = useState(false);
-  const [cleanNotice, setCleanNotice] = useState(null); // { type: "success"|"warn", message }
+  const [cleanNotice, setCleanNotice] = useState(null);
   const fileInputRef = useRef(null);
 
-  // YouTube transcript state
   const [showYoutubeInput, setShowYoutubeInput] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [isFetchingYoutube, setIsFetchingYoutube] = useState(false);
@@ -59,7 +52,7 @@ const Hero = () => {
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    e.target.value = ""; // reset so same file can be re-uploaded
+    e.target.value = "";
 
     const ext = "." + file.name.toLowerCase().split(".").pop();
     if (!ACCEPTED_EXTENSIONS.includes(ext)) {
@@ -81,7 +74,6 @@ const Hero = () => {
       let data;
 
       if (isPDF) {
-        // PDF: send as multipart form data to /api/extract-pdf
         const formData = new FormData();
         formData.append("file", file);
         const response = await fetch(`${TTS_BACKEND_URL}/api/extract-pdf`, {
@@ -99,7 +91,6 @@ const Hero = () => {
         setCleanNotice({ type: data.available ? "success" : "warn", message: notice });
         if (data.available) setTimeout(() => setCleanNotice(null), 4000);
       } else {
-        // Text file: read as string, send to /api/clean
         const rawText = await file.text();
         if (!rawText.trim()) { setIsCleaning(false); return; }
 
@@ -120,7 +111,6 @@ const Hero = () => {
             setTimeout(() => setCleanNotice(null), 3000);
           }
         } else {
-          // Backend error — load raw text without cleaning
           setText(rawText.slice(0, MAX_TEXT_LENGTH));
           setCleanNotice({ type: "warn", message: "Cleanup unavailable — text loaded as-is." });
           setIsCleaning(false);
@@ -185,7 +175,6 @@ const Hero = () => {
 
   return (
     <section className="relative flex flex-col items-center justify-center w-full min-h-full max-w-5xl mx-auto px-6 pt-28 md:pt-20 pb-8 md:pb-4">
-      {/* 1. CENTERED HEADLINE (THE PITCH) */}
       <div className="flex flex-col items-center justify-center w-full grow">
         <div className="text-center z-10 flex flex-col items-center mb-10 md:mb-8">
           <h1 className="mb-4 text-3xl md:text-5xl lg:text-6xl font-medium leading-[1.1] tracking-tight text-neutral-900 animate-fade-in-up">
@@ -193,7 +182,6 @@ const Hero = () => {
             <span className="text-neutral-500">Instantly.</span>
           </h1>
 
-          {/* Use Case Badges — click to load demo text */}
           <div
             className="flex flex-wrap items-center justify-center gap-2 mt-5 animate-fade-in-up"
             style={{ animationDelay: "100ms" }}
@@ -215,14 +203,12 @@ const Hero = () => {
           </div>
         </div>
 
-        {/* 2. INTERACTIVE CARD */}
         <div
           className="w-full max-w-3xl animate-fade-in-up"
           style={{ animationDelay: "300ms" }}
         >
           <div className="relative mx-auto w-full overflow-hidden rounded-2xl bg-white shadow-2xl shadow-orange-900/10 border border-white/60">
             <div className="p-6">
-              {/* Hidden file input */}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -231,10 +217,8 @@ const Hero = () => {
                 onChange={handleFileUpload}
               />
 
-              {/* Header: Upload + YouTube (left) + Expand toggle (right) */}
               <div className="mb-5 md:mb-4 flex items-center justify-between gap-3">
                 {showYoutubeInput ? (
-                  /* YouTube URL input mode */
                   <form
                     onSubmit={handleYoutubeTranscript}
                     className="flex items-center gap-2 flex-1 min-w-0"
@@ -271,7 +255,6 @@ const Hero = () => {
                     </button>
                   </form>
                 ) : (
-                  /* Normal mode: Upload & Clean + YouTube button */
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => fileInputRef.current?.click()}
@@ -289,10 +272,8 @@ const Hero = () => {
                       </span>
                     </button>
 
-                    {/* Divider */}
                     <span className="w-px h-3 bg-neutral-200 shrink-0"></span>
 
-                    {/* YouTube button */}
                     <button
                       onClick={() => { setShowYoutubeInput(true); setCleanNotice(null); }}
                       className="flex items-center gap-1.5 text-[10px] md:text-xs font-medium text-neutral-400 hover:text-red-500 transition-colors"
@@ -302,7 +283,6 @@ const Hero = () => {
                       <span className="hidden sm:inline">YouTube</span>
                     </button>
 
-                    {/* Format info tooltip */}
                     <div className="relative group/tip">
                       <i className="ri-information-line text-[10px] md:text-xs text-neutral-300 hover:text-neutral-500 cursor-default transition-colors"></i>
                       <div className="absolute left-0 top-5 z-50 hidden group-hover/tip:block w-48 rounded-lg bg-neutral-800 px-3 py-2 text-[10px] text-neutral-200 shadow-lg">
@@ -315,7 +295,6 @@ const Hero = () => {
                   </div>
                 )}
 
-                {/* Expand toggle — hidden when YouTube input is open */}
                 {!showYoutubeInput && (
                   <button
                     onClick={() => setIsExpanded(!isExpanded)}
@@ -331,7 +310,6 @@ const Hero = () => {
                 )}
               </div>
 
-              {/* Input Area */}
               <div className="relative group">
                 <textarea
                   className={`w-full resize-none border-none bg-transparent p-0 text-lg md:text-2xl font-light leading-relaxed text-neutral-800 focus:ring-0 placeholder:text-neutral-300 transition-all duration-300 ${
@@ -355,9 +333,7 @@ const Hero = () => {
                 </div>
               </div>
 
-              {/* Footer Controls */}
               <div className="mt-6 flex items-center justify-between border-t border-neutral-100 pt-6">
-                {/* Voice + Tone Selectors */}
                 <div className="flex items-center gap-2">
                   <DropupSelector
                     items={VOICE_ITEMS}
@@ -375,9 +351,7 @@ const Hero = () => {
                   />
                 </div>
 
-                {/* Action Buttons */}
                 <div className="flex items-center gap-2 md:gap-3">
-                  {/* Download Button */}
                   <button
                     onClick={handleDownload}
                     disabled={!hasAudio}
@@ -397,7 +371,6 @@ const Hero = () => {
                     <i className="ri-download-2-line text-lg md:text-xl"></i>
                   </button>
 
-                  {/* Play Button */}
                   <button
                     onClick={handlePlay}
                     disabled={isLoading || !backendReady}
@@ -432,7 +405,6 @@ const Hero = () => {
                 </div>
               </div>
 
-              {/* Error Message */}
               {error && (
                 <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
                   <i className="ri-error-warning-line mr-2"></i>
@@ -440,7 +412,6 @@ const Hero = () => {
                 </div>
               )}
 
-              {/* Clean Notice */}
               {cleanNotice && (
                 <div
                   className={`mt-3 p-2.5 rounded-lg text-xs flex items-center gap-2 ${
@@ -463,7 +434,6 @@ const Hero = () => {
           </div>
         </div>
 
-        {/* Backend Status Banner */}
         {!backendReady && (
           <div
             className={`mt-4 flex items-center gap-2 rounded-lg px-3 py-2 text-xs animate-fade-in-up ${
@@ -486,7 +456,6 @@ const Hero = () => {
           </div>
         )}
 
-        {/* Kokoro Attribution */}
         <div
           className="mt-6 text-center animate-fade-in-up"
           style={{ animationDelay: "500ms" }}

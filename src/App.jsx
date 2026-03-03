@@ -6,7 +6,6 @@ import { useAuth } from "./hooks/useAuth";
 function App() {
   const { isAuthenticated, isLoggingIn, authError, login, logout } = useAuth();
 
-  // Show login gate if not authenticated
   if (!isAuthenticated) {
     return (
       <Login onLogin={login} authError={authError} isLoggingIn={isLoggingIn} />

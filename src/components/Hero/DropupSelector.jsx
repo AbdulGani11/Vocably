@@ -1,21 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 
-/**
- * REUSABLE DROPUP SELECTOR
- * A generic dropdown that opens upward. Used for both Voice and Tone selection.
- *
- * Props:
- *   items         — array of { value, label, icon? } options
- *   selectedValue — the currently selected value
- *   onChange      — called with the new value when an option is picked
- *   label         — micro-label shown above the selected name (e.g. "Voice", "Tone")
- *   triggerIcon   — icon class shown in the trigger button (used when no item icon exists)
- */
 const DropupSelector = ({ items, selectedValue, onChange, label, triggerIcon }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
 
-  // Close when clicking outside this specific dropdown
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (isOpen && containerRef.current && !containerRef.current.contains(event.target)) {
@@ -26,7 +14,6 @@ const DropupSelector = ({ items, selectedValue, onChange, label, triggerIcon }) 
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
-  // Derive what to show in the trigger button from the selected item
   const selectedItem = items.find((item) => item.value === selectedValue);
   const displayIcon = selectedItem?.icon || triggerIcon;
   const displayLabel = selectedItem?.label || label;
@@ -35,7 +22,6 @@ const DropupSelector = ({ items, selectedValue, onChange, label, triggerIcon }) 
 
   return (
     <div ref={containerRef} className="flex items-center relative">
-      {/* Trigger button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex cursor-pointer items-center gap-1.5 md:gap-2 rounded-full border border-neutral-200 pl-1.5 md:pl-2 pr-2 md:pr-3 py-0.5 md:py-1 bg-white hover:border-neutral-300 transition-colors group"
@@ -58,7 +44,6 @@ const DropupSelector = ({ items, selectedValue, onChange, label, triggerIcon }) 
         ></i>
       </button>
 
-      {/* Dropdown panel — opens upward via bottom-full */}
       <div className={`dropdown-panel bottom-full mb-2 left-0 w-56 ${dropdownClasses}`}>
         <div className="p-2 max-h-64 overflow-y-auto">
           {items.map((item) => (

@@ -1,30 +1,24 @@
-export const MAX_TEXT_LENGTH = 5000;
-export const WARNING_THRESHOLD = 4500;
+export const MAX_TEXT_LENGTH = 10000;
+export const WARNING_THRESHOLD = 9000;
 
-// Kokoro-82M voices — grouped by accent
 export const VOICES = [
-    // American Female
     { value: "af_heart",   label: "Heart",   group: "American Female" },
     { value: "af_bella",   label: "Bella",   group: "American Female" },
     { value: "af_nicole",  label: "Nicole",  group: "American Female" },
     { value: "af_sarah",   label: "Sarah",   group: "American Female" },
     { value: "af_sky",     label: "Sky",     group: "American Female" },
-    // American Male
     { value: "am_adam",    label: "Adam",    group: "American Male" },
     { value: "am_michael", label: "Michael", group: "American Male" },
     { value: "am_echo",    label: "Echo",    group: "American Male" },
     { value: "am_liam",    label: "Liam",    group: "American Male" },
-    // British Female
     { value: "bf_emma",    label: "Emma",    group: "British Female" },
     { value: "bf_alice",   label: "Alice",   group: "British Female" },
     { value: "bf_lily",    label: "Lily",    group: "British Female" },
-    // British Male
     { value: "bm_george",  label: "George",  group: "British Male" },
     { value: "bm_daniel",  label: "Daniel",  group: "British Male" },
     { value: "bm_lewis",   label: "Lewis",   group: "British Male" },
 ];
 
-// Speed presets — replaces Tone (Kokoro supports speed, not tone instructions)
 export const SPEED_PRESETS = [
     { id: "slow",      label: "Slow",      icon: "ri-snail-line",       speed: 0.75 },
     { id: "normal",    label: "Normal",    icon: "ri-equalizer-line",   speed: 1.0  },
@@ -32,7 +26,6 @@ export const SPEED_PRESETS = [
     { id: "very_fast", label: "Very Fast", icon: "ri-rocket-2-line",    speed: 1.5  },
 ];
 
-// Use case badges — faceless YouTube niches, click to load a demo script
 export const USE_CASES = [
     {
         id: "finance",

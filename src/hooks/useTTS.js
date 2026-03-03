@@ -1,34 +1,26 @@
 import { useState, useRef, useEffect } from "react";
 
-// Backend URL from environment variable
 const TTS_BACKEND_URL = import.meta.env.VITE_TTS_BACKEND_URL || "http://localhost:8000";
 
 export const useTTS = () => {
-    // Text input from user
     const [text, setText] = useState(
         "Welcome to Vocably. Experience natural-sounding voice synthesis powered by Kokoro. Type your text here and hit play."
     );
 
-    // Playback state
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // Configuration state
     const [selectedVoice, setSelectedVoice] = useState("af_heart");
     const [speed, setSpeed] = useState(1.0);
 
-    // Audio availability for download
     const [hasAudio, setHasAudio] = useState(false);
 
-    // Backend readiness: "checking" | "warming" | "ready" | "offline"
     const [backendStatus, setBackendStatus] = useState("checking");
 
-    // Audio element ref and blob URL ref
     const currentAudio = useRef(null);
     const audioBlobUrl = useRef(null);
 
-    // Poll /health until Kokoro pipeline is loaded, then stop
     useEffect(() => {
         let intervalId;
         const poll = async () => {
@@ -55,7 +47,6 @@ export const useTTS = () => {
         return () => clearInterval(intervalId);
     }, []);
 
-    // Cleanup blob URL on unmount
     useEffect(() => {
         return () => {
             if (audioBlobUrl.current) {
@@ -65,7 +56,6 @@ export const useTTS = () => {
     }, []);
 
     const handlePlay = async () => {
-        // STOP CASE
         if (isSpeaking && currentAudio.current) {
             currentAudio.current.pause();
             currentAudio.current = null;
@@ -73,7 +63,6 @@ export const useTTS = () => {
             return;
         }
 
-        // VALIDATION
         if (!text.trim()) {
             setError("Please enter some text to convert to speech.");
             return;
@@ -83,15 +72,12 @@ export const useTTS = () => {
         setError(null);
 
         try {
-            // Read JWT from sessionStorage — set during login
             const token = sessionStorage.getItem("vocably_token");
 
-            // Call FastAPI backend (JWT required by the server)
             const response = await fetch(`${TTS_BACKEND_URL}/api/tts`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    // Attach Bearer token — server returns 401 if missing or invalid
                     ...(token ? { "Authorization": `Bearer ${token}` } : {}),
                 },
                 body: JSON.stringify({
@@ -103,7 +89,6 @@ export const useTTS = () => {
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                // 401 means the token is missing, expired, or tampered with
                 if (response.status === 401) {
                     throw new Error("Session expired. Please log in again.");
                 }
@@ -112,11 +97,9 @@ export const useTTS = () => {
 
             const data = await response.json();
 
-            // Decode base64 audio into a blob
             const audioArray = Uint8Array.from(atob(data.audio_base64), (char) => char.charCodeAt(0));
             const audioBlob = new Blob([audioArray], { type: "audio/wav" });
 
-            // Revoke previous URL if exists
             if (audioBlobUrl.current) {
                 URL.revokeObjectURL(audioBlobUrl.current);
             }
@@ -124,7 +107,6 @@ export const useTTS = () => {
             audioBlobUrl.current = URL.createObjectURL(audioBlob);
             setHasAudio(true);
 
-            // Play audio
             const audio = new Audio(audioBlobUrl.current);
             currentAudio.current = audio;
 
@@ -144,7 +126,6 @@ export const useTTS = () => {
         } catch (err) {
             console.error("TTS Error:", err);
 
-            // Provide helpful error messages
             if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
                 setError("Cannot connect to TTS server. Check that the backend is running (local) or accessible (cloud).");
             } else {

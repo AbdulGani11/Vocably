@@ -1,6 +1,3 @@
-# Vocably TTS Backend — powered by Kokoro-82M
-# Run with: python main.py
-
 import io
 import os
 import re
@@ -25,14 +22,10 @@ from auth import create_access_token, validate_credentials, verify_token
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Kokoro pipeline — loaded once at startup, shared across requests
 _pipeline = None
-# Single-threaded executor: Kokoro generation is not thread-safe
 _executor: Optional[concurrent.futures.ThreadPoolExecutor] = None
-# True only after pipeline + voice warm-up are both complete
 _ready = False
 
-# Request / Response models
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -56,12 +49,12 @@ class CleanRequest(BaseModel):
 
 class CleanResponse(BaseModel):
     cleaned_text: str
-    available: bool  # False if Ollama is not running
+    available: bool
 
 class PDFResponse(BaseModel):
     cleaned_text: str
     pages: int
-    method: str   # "digital" or "ocr"
+    method: str
     available: bool
 
 class YouTubeRequest(BaseModel):
@@ -70,49 +63,40 @@ class YouTubeRequest(BaseModel):
 class YouTubeResponse(BaseModel):
     cleaned_text: str
     video_id: str
-    available: bool  # False if Ollama is not running
+    available: bool
 
-# Regex post-processor — catches timestamps the model may miss
 _TIMESTAMP_RE = re.compile(
     r"""
-    \[?\(?\d{1,2}:\d{2}(?::\d{2})?(?:[,\.]\d+)?\]?\)?  # [00:01:23] (1:23) 00:01:23,456
-    | \[\d+\]                                             # subtitle sequence numbers [1]
+    \[?\(?\d{1,2}:\d{2}(?::\d{2})?(?:[,\.]\d+)?\]?\)?
+    | \[\d+\]
     """,
     re.VERBOSE,
 )
 
-# Matches "Speaker 1:", "Speaker 2:", "SPEAKER 01:" at the start of any line.
-# Conservative on purpose — only targets the unambiguous "Speaker N:" pattern
-# so legitimate colons in prose (e.g. "Note: ...") are never stripped.
 _SPEAKER_LABEL_RE = re.compile(
     r"^\s*(?:Speaker|SPEAKER)\s+\w+[:\s]\s*",
     re.MULTILINE,
 )
 
 def _regex_clean(text: str) -> str:
-    """Strip structural noise (timestamps, speaker labels), then normalise whitespace."""
     text = _TIMESTAMP_RE.sub("", text)
     text = _SPEAKER_LABEL_RE.sub("", text)
-    text = re.sub(r"[ \t]{2,}", " ", text)       # collapse multiple spaces
-    text = re.sub(r"\n{3,}", "\n\n", text)        # max two consecutive newlines
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
-# Format-specific parsers — deterministic, no LLM required
-_TAG_RE = re.compile(r"<[^>]+>")  # strips inline HTML tags from subtitle content
+_TAG_RE = re.compile(r"<[^>]+>")
 
 def _detect_format(text: str) -> str:
-    """Return 'srt', 'vtt', or 'text' based on content structure."""
     stripped = text.strip()
     if stripped.startswith("WEBVTT"):
         return "vtt"
-    # SRT: first non-empty block is a number, followed by a timestamp line
     if re.match(r"^\d+\r?\n\d{1,2}:\d{2}:\d{2},\d{3}\s*-->", stripped):
         return "srt"
     return "text"
 
 
 def _parse_vtt(text: str) -> str:
-    """Extract plain text from WebVTT, stripping headers, cue timings and tags."""
     lines = []
     for line in text.splitlines():
         line = line.strip()
@@ -120,9 +104,9 @@ def _parse_vtt(text: str) -> str:
             continue
         if line.startswith(("WEBVTT", "NOTE", "STYLE", "REGION")):
             continue
-        if "-->" in line:          # cue timing line
+        if "-->" in line:
             continue
-        if re.match(r"^\d+$", line):  # numeric cue identifier
+        if re.match(r"^\d+$", line):
             continue
         line = _TAG_RE.sub("", line)
         if line:
@@ -131,16 +115,14 @@ def _parse_vtt(text: str) -> str:
 
 
 def _parse_srt(text: str) -> str:
-    """Extract plain text from SRT using the srt library."""
-    import srt  # noqa: PLC0415 — lazy import, installed via requirements.txt
+    import srt  # noqa: PLC0415
     subs = list(srt.parse(text, ignore_errors=True))
     parts = [_TAG_RE.sub("", sub.content).strip() for sub in subs]
     return " ".join(p for p in parts if p)
 
-# Ollama local server — user must have Ollama installed and qwen2.5:3b pulled
 _OLLAMA_URL = "http://localhost:11434"
 _OLLAMA_MODEL = "qwen2.5:3b"
-# Full clean — for raw .txt / .md files that still have structure + fillers
+
 _CLEAN_SYSTEM_PROMPT = (
     "You are a text formatter for text-to-speech conversion. "
     "Clean the given text strictly by these rules:\n"
@@ -152,8 +134,6 @@ _CLEAN_SYSTEM_PROMPT = (
     "Output ONLY the cleaned text. No explanations, no preamble, no extra commentary."
 )
 
-# Filler-only — for already-parsed SRT/VTT text where structure is already clean.
-# Intentionally minimal: no rewriting, no restructuring, preserve every content word.
 _FILLER_ONLY_PROMPT = (
     "Remove ONLY these spoken filler words from the text: "
     "um, uh, you know, i mean, so yeah, basically, literally. "
@@ -163,19 +143,13 @@ _FILLER_ONLY_PROMPT = (
     "Output ONLY the cleaned text."
 )
 
-# YouTube video ID extractor
 def _extract_video_id(url: str) -> Optional[str]:
-    """
-    Extract the 11-character video ID from any common YouTube URL format.
-    Supports: watch?v=, youtu.be/, /embed/, /shorts/, /live/
-    Returns None if no valid ID is found.
-    """
     patterns = [
-        r"(?:v=)([a-zA-Z0-9_-]{11})",         # youtube.com/watch?v=ID
-        r"(?:youtu\.be/)([a-zA-Z0-9_-]{11})",  # youtu.be/ID
-        r"(?:embed/)([a-zA-Z0-9_-]{11})",       # youtube.com/embed/ID
-        r"(?:shorts/)([a-zA-Z0-9_-]{11})",      # youtube.com/shorts/ID
-        r"(?:live/)([a-zA-Z0-9_-]{11})",        # youtube.com/live/ID
+        r"(?:v=)([a-zA-Z0-9_-]{11})",
+        r"(?:youtu\.be/)([a-zA-Z0-9_-]{11})",
+        r"(?:embed/)([a-zA-Z0-9_-]{11})",
+        r"(?:shorts/)([a-zA-Z0-9_-]{11})",
+        r"(?:live/)([a-zA-Z0-9_-]{11})",
     ]
     for pattern in patterns:
         match = re.search(pattern, url)
@@ -183,13 +157,7 @@ def _extract_video_id(url: str) -> Optional[str]:
             return match.group(1)
     return None
 
-# Audio generation (runs in thread pool, not the event loop)
 def _generate_sync(text: str, voice: str, speed: float) -> tuple[str, int]:
-    """
-    Blocking Kokoro generation. Called via run_in_executor so it doesn't
-    stall the asyncio event loop.
-    Returns (audio_base64, sample_rate).
-    """
     chunks = []
     for _, _, audio in _pipeline(text, voice=voice, speed=speed, split_pattern=r'\n+'):
         chunks.append(audio)
@@ -204,7 +172,6 @@ def _generate_sync(text: str, voice: str, speed: float) -> tuple[str, int]:
     audio_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
     return audio_b64, 24000
 
-# Lifespan — load model on startup
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _pipeline, _executor, _ready
@@ -213,14 +180,10 @@ async def lifespan(app: FastAPI):
     from kokoro import KPipeline
     _pipeline = KPipeline(lang_code="a")
 
-    # max_workers=1 keeps generation sequential; Kokoro is not thread-safe
     _executor = concurrent.futures.ThreadPoolExecutor(
         max_workers=1, thread_name_prefix="kokoro"
     )
 
-    # Pre-warm: download & cache the default voice file so the first real
-    # request doesn't pay the HuggingFace download cost mid-request.
-    # This runs synchronously during startup (before any requests are served).
     logger.info("Pre-warming voice cache (af_heart)...")
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(_executor, _generate_sync, "Ready.", "af_heart", 1.0)
@@ -233,7 +196,6 @@ async def lifespan(app: FastAPI):
     _executor.shutdown(wait=False)
     logger.info("Server stopped.")
 
-# FastAPI app
 app = FastAPI(
     title="Vocably TTS API",
     description="Text-to-Speech API powered by Kokoro-82M",
@@ -249,7 +211,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Endpoints
 @app.post("/login", response_model=LoginResponse)
 async def login(request: LoginRequest):
     if not validate_credentials(request.username, request.password):
@@ -269,11 +230,11 @@ async def generate_speech(
     text = request.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="Text is required")
-    if len(text) > 5000:
-        raise HTTPException(status_code=400, detail="Text too long (max 5000 chars)")
+    if len(text) > 10000:
+        raise HTTPException(status_code=400, detail="Text too long (max 10000 chars)")
 
     voice = request.voice or "af_heart"
-    speed = max(0.5, min(2.0, request.speed or 1.0))  # clamp to safe range
+    speed = max(0.5, min(2.0, request.speed or 1.0))
 
     logger.info(
         f"[{payload.get('sub', '?')}] TTS: voice={voice} speed={speed} "
@@ -297,25 +258,20 @@ async def generate_speech(
 
 @app.get("/api/voices")
 async def list_voices():
-    """Return available Kokoro voices grouped by accent."""
     return {
         "voices": [
-            # American Female
             {"value": "af_heart",   "label": "Heart",    "group": "American Female"},
             {"value": "af_bella",   "label": "Bella",    "group": "American Female"},
             {"value": "af_nicole",  "label": "Nicole",   "group": "American Female"},
             {"value": "af_sarah",   "label": "Sarah",    "group": "American Female"},
             {"value": "af_sky",     "label": "Sky",      "group": "American Female"},
-            # American Male
             {"value": "am_adam",    "label": "Adam",     "group": "American Male"},
             {"value": "am_michael", "label": "Michael",  "group": "American Male"},
             {"value": "am_echo",    "label": "Echo",     "group": "American Male"},
             {"value": "am_liam",    "label": "Liam",     "group": "American Male"},
-            # British Female
             {"value": "bf_emma",    "label": "Emma",     "group": "British Female"},
             {"value": "bf_alice",   "label": "Alice",    "group": "British Female"},
             {"value": "bf_lily",    "label": "Lily",     "group": "British Female"},
-            # British Male
             {"value": "bm_george",  "label": "George",   "group": "British Male"},
             {"value": "bm_daniel",  "label": "Daniel",   "group": "British Male"},
             {"value": "bm_lewis",   "label": "Lewis",    "group": "British Male"},
@@ -324,7 +280,6 @@ async def list_voices():
 
 
 async def _ollama_clean(text: str, prompt: str = _CLEAN_SYSTEM_PROMPT) -> tuple[str, bool]:
-    """Call Ollama to clean text. Returns (cleaned_text, available)."""
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
@@ -341,9 +296,6 @@ async def _ollama_clean(text: str, prompt: str = _CLEAN_SYSTEM_PROMPT) -> tuple[
             response.raise_for_status()
             data = response.json()
             cleaned = _regex_clean(data["message"]["content"])
-            # Sanity check: if the model removed >80% of the content it likely
-            # over-cleaned (common with 0.5B on structured text like interviews).
-            # Fall back to regex-only clean so no content is lost.
             if len(cleaned) < max(50, len(text) * 0.2):
                 logger.warning(
                     f"Ollama output too short ({len(cleaned)} vs {len(text)} chars) "
@@ -356,16 +308,10 @@ async def _ollama_clean(text: str, prompt: str = _CLEAN_SYSTEM_PROMPT) -> tuple[
 
 
 def _extract_pdf(pdf_bytes: bytes) -> tuple[str, int, str]:
-    """
-    Extract text from PDF bytes.
-    Returns (raw_text, page_count, method) where method is "digital" or "ocr".
-    Tries pymupdf first; falls back to tesseract if text yield is too low.
-    """
-    import fitz  # pymupdf — imported lazily so server starts without it
+    import fitz
     import pytesseract
     from PIL import Image
 
-    # Point pytesseract at the default Windows install path (overridable via env)
     if sys.platform == "win32":
         pytesseract.pytesseract.tesseract_cmd = os.environ.get(
             "TESSERACT_CMD", r"C:\Program Files\Tesseract-OCR\tesseract.exe"
@@ -374,13 +320,11 @@ def _extract_pdf(pdf_bytes: bytes) -> tuple[str, int, str]:
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     page_count = len(doc)
 
-    # --- Digital extraction path ---
     pages_text = [page.get_text() for page in doc]
     text = "\n\n".join(pages_text).strip()
     if len(text) >= 50:
         return text, page_count, "digital"
 
-    # --- OCR fallback path (scanned / image-based PDF) ---
     logger.info("PDF digital extraction yielded < 50 chars — falling back to Tesseract OCR")
     ocr_parts = []
     for page in doc:
@@ -395,11 +339,6 @@ async def clean_text(
     request: CleanRequest,
     payload: dict = Depends(verify_token),
 ):
-    """
-    Clean uploaded text for TTS. Routes by format:
-      .srt / .vtt  → parser strips structure → Ollama removes fillers
-      .txt / .md   → Ollama cleans directly (Qwen2.5-1.5B)
-    """
     text = request.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="Text is required")
@@ -421,7 +360,6 @@ async def clean_text(
         except ImportError:
             logger.warning("srt library not installed — falling back to Ollama for SRT")
 
-    # Prose (.txt / .md) — use Ollama
     try:
         cleaned, available = await _ollama_clean(text)
         if available:
@@ -440,11 +378,6 @@ async def extract_pdf(
     file: UploadFile = File(...),
     payload: dict = Depends(verify_token),
 ):
-    """
-    Extract and clean text from an uploaded PDF.
-    Tries digital extraction (pymupdf) first; falls back to Tesseract OCR for scanned PDFs.
-    Cleaned with Qwen2.5-0.5B via Ollama.
-    """
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted")
 
@@ -482,12 +415,6 @@ async def youtube_transcript(
     request: YouTubeRequest,
     payload: dict = Depends(verify_token),
 ):
-    """
-    Fetch a YouTube video's captions and clean them for TTS.
-    Works with auto-generated and manual captions. Requires no API key.
-    Returns 422 if the video has no captions or captions are disabled.
-    """
-    # Lazy import — keeps startup fast if package is not yet installed
     try:
         from youtube_transcript_api import (  # noqa: PLC0415
             YouTubeTranscriptApi,
@@ -510,7 +437,6 @@ async def youtube_transcript(
 
     try:
         loop = asyncio.get_running_loop()
-        # v1.x API: instantiate then call .fetch(); returns iterable of snippet objects
         result = await loop.run_in_executor(
             None,
             lambda: YouTubeTranscriptApi().fetch(video_id),
@@ -533,7 +459,6 @@ async def youtube_transcript(
             detail=f"Could not fetch transcript: {str(e)}",
         )
 
-    # Each snippet has .text, .start, .duration attributes (v1.x changed from dict to object)
     raw_text = " ".join(
         s.text.replace("\n", " ").strip()
         for s in result
@@ -547,7 +472,6 @@ async def youtube_transcript(
         f"[{payload.get('username', '?')}] YouTube: {video_id} — {len(raw_text)} chars raw"
     )
 
-    # Auto-generated captions lack punctuation and capitalisation — use full clean prompt
     cleaned, available = await _ollama_clean(raw_text, prompt=_CLEAN_SYSTEM_PROMPT)
 
     logger.info(
@@ -561,7 +485,6 @@ async def youtube_transcript(
 async def health():
     return {"status": "healthy" if _ready else "loading"}
 
-# Entry point
 if __name__ == "__main__":
     import uvicorn
 

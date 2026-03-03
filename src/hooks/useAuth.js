@@ -3,20 +3,7 @@ import { useState, useCallback } from "react";
 const TTS_BACKEND_URL = import.meta.env.VITE_TTS_BACKEND_URL || "http://localhost:8000";
 const TOKEN_KEY = "vocably_token";
 
-/**
- * useAuth — manages JWT authentication state for Vocably.
- *
- * Token storage: sessionStorage (clears on tab close, safer than localStorage).
- * This is intentional — it limits the token's lifetime to the browser session,
- * reducing the window for token theft if a user walks away from their machine.
- *
- * Flow:
- *   1. login()  → POST /login  → store token in sessionStorage
- *   2. logout() → clear sessionStorage → redirect to login page
- *   3. getToken() → read token for Authorization headers in API calls
- */
 export const useAuth = () => {
-    // Initialize auth state from sessionStorage (persists across re-renders but not tab close)
     const [isAuthenticated, setIsAuthenticated] = useState(
         () => !!sessionStorage.getItem(TOKEN_KEY)
     );
@@ -27,8 +14,6 @@ export const useAuth = () => {
         setIsLoggingIn(true);
         setAuthError(null);
 
-        // 30-second timeout — if HF Spaces backend is cold-starting, the request
-        // would otherwise hang silently for minutes before failing
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
 
@@ -55,13 +40,10 @@ export const useAuth = () => {
             clearTimeout(timeoutId);
 
             if (err.name === "AbortError") {
-                // Timeout — backend unreachable or not running
                 setAuthError("Server not responding. Make sure the backend is running and try again.");
             } else if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
-                // Network unreachable
                 setAuthError("Cannot connect to server. Check your connection and try again.");
             } else {
-                // Actual auth error (wrong credentials, 401, etc.)
                 setAuthError(err.message || "Login failed. Please try again.");
             }
             return false;
@@ -77,10 +59,6 @@ export const useAuth = () => {
         setAuthError(null);
     }, []);
 
-    /**
-     * Returns the stored token for use in Authorization headers.
-     * Returns null if not authenticated.
-     */
     const getToken = useCallback(() => {
         return sessionStorage.getItem(TOKEN_KEY);
     }, []);
