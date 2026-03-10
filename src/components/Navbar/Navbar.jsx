@@ -8,7 +8,7 @@ const NAV_LINKS = [
   { label: "DOCS", id: "docs", Content: DocsContent },
 ];
 
-const Navbar = ({ onLogout }) => {
+const Navbar = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [expandedSection, setExpandedSection] = useState(null);
 
@@ -33,17 +33,6 @@ const Navbar = ({ onLogout }) => {
           ))}
         </div>
 
-        {onLogout && (
-          <button
-            onClick={onLogout}
-            className="hidden lg:flex items-center gap-1.5 text-xs font-medium text-neutral-400 hover:text-neutral-700 transition-colors"
-            aria-label="Log out"
-            title="Log out"
-          >
-            <i className="ri-logout-box-r-line text-sm" />
-            <span>Log out</span>
-          </button>
-        )}
 
         <button
           className="lg:hidden text-neutral-800 z-20 ml-auto"

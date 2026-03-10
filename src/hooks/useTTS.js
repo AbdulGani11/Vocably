@@ -72,13 +72,10 @@ export const useTTS = () => {
         setError(null);
 
         try {
-            const token = sessionStorage.getItem("vocably_token");
-
             const response = await fetch(`${TTS_BACKEND_URL}/api/tts`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    ...(token ? { "Authorization": `Bearer ${token}` } : {}),
                 },
                 body: JSON.stringify({
                     text: text.trim(),
@@ -89,9 +86,6 @@ export const useTTS = () => {
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                if (response.status === 401) {
-                    throw new Error("Session expired. Please log in again.");
-                }
                 throw new Error(errorData.detail || `Server error: ${response.status}`);
             }
 

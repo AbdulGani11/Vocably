@@ -13,11 +13,9 @@ import httpx
 import base64
 import numpy as np
 import soundfile as sf
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-
-from auth import create_access_token, validate_credentials, verify_token
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -25,14 +23,6 @@ logger = logging.getLogger(__name__)
 _pipeline = None
 _executor: Optional[concurrent.futures.ThreadPoolExecutor] = None
 _ready = False
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
-class LoginResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
 
 class TTSRequest(BaseModel):
     text: str
@@ -121,7 +111,7 @@ def _parse_srt(text: str) -> str:
     return " ".join(p for p in parts if p)
 
 _OLLAMA_URL = "http://localhost:11434"
-_OLLAMA_MODEL = "qwen2.5:3b"
+_OLLAMA_MODEL = "qwen3.5:4b"
 
 _CLEAN_SYSTEM_PROMPT = (
     "You are a text formatter for text-to-speech conversion. "
@@ -211,19 +201,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/login", response_model=LoginResponse)
-async def login(request: LoginRequest):
-    if not validate_credentials(request.username, request.password):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    logger.info(f"User '{request.username}' logged in.")
-    return LoginResponse(access_token=create_access_token({"sub": request.username}))
-
 
 @app.post("/api/tts", response_model=TTSResponse)
-async def generate_speech(
-    request: TTSRequest,
-    payload: dict = Depends(verify_token),
-):
+async def generate_speech(request: TTSRequest):
     if _pipeline is None:
         raise HTTPException(status_code=503, detail="TTS pipeline not ready")
 
@@ -236,10 +216,7 @@ async def generate_speech(
     voice = request.voice or "af_heart"
     speed = max(0.5, min(2.0, request.speed or 1.0))
 
-    logger.info(
-        f"[{payload.get('sub', '?')}] TTS: voice={voice} speed={speed} "
-        f"text='{text[:50]}...'"
-    )
+    logger.info(f"TTS: voice={voice} speed={speed} text='{text[:50]}...'")
 
     loop = asyncio.get_running_loop()
     try:
@@ -335,10 +312,7 @@ def _extract_pdf(pdf_bytes: bytes) -> tuple[str, int, str]:
 
 
 @app.post("/api/clean", response_model=CleanResponse)
-async def clean_text(
-    request: CleanRequest,
-    payload: dict = Depends(verify_token),
-):
+async def clean_text(request: CleanRequest):
     text = request.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="Text is required")
@@ -347,14 +321,14 @@ async def clean_text(
 
     if fmt == "vtt":
         parsed = _parse_vtt(text)
-        logger.info(f"[{payload.get('sub', '?')}] VTT parsed: {len(text)} → {len(parsed)} chars")
+        logger.info(f"VTT parsed: {len(text)} → {len(parsed)} chars")
         cleaned, available = await _ollama_clean(parsed, prompt=_FILLER_ONLY_PROMPT)
         return CleanResponse(cleaned_text=cleaned, available=available)
 
     if fmt == "srt":
         try:
             parsed = _parse_srt(text)
-            logger.info(f"[{payload.get('sub', '?')}] SRT parsed: {len(text)} → {len(parsed)} chars")
+            logger.info(f"SRT parsed: {len(text)} → {len(parsed)} chars")
             cleaned, available = await _ollama_clean(parsed, prompt=_FILLER_ONLY_PROMPT)
             return CleanResponse(cleaned_text=cleaned, available=available)
         except ImportError:
@@ -363,7 +337,7 @@ async def clean_text(
     try:
         cleaned, available = await _ollama_clean(text)
         if available:
-            logger.info(f"[{payload.get('sub', '?')}] Ollama cleaned: {len(text)} → {len(cleaned)} chars")
+            logger.info(f"Ollama cleaned: {len(text)} → {len(cleaned)} chars")
         else:
             logger.warning("Ollama not reachable at localhost:11434 — returning original text")
         return CleanResponse(cleaned_text=cleaned, available=available)
@@ -374,10 +348,7 @@ async def clean_text(
 
 
 @app.post("/api/extract-pdf", response_model=PDFResponse)
-async def extract_pdf(
-    file: UploadFile = File(...),
-    payload: dict = Depends(verify_token),
-):
+async def extract_pdf(file: UploadFile = File(...)):
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted")
 
@@ -403,18 +374,12 @@ async def extract_pdf(
         raise HTTPException(status_code=422, detail="Could not extract any text from this PDF")
 
     cleaned, available = await _ollama_clean(raw_text)
-    logger.info(
-        f"[{payload.get('sub', '?')}] PDF extracted: {page_count}p via {method}, "
-        f"{len(raw_text)} → {len(cleaned)} chars"
-    )
+    logger.info(f"PDF extracted: {page_count}p via {method}, {len(raw_text)} → {len(cleaned)} chars")
     return PDFResponse(cleaned_text=cleaned, pages=page_count, method=method, available=available)
 
 
 @app.post("/api/youtube-transcript", response_model=YouTubeResponse)
-async def youtube_transcript(
-    request: YouTubeRequest,
-    payload: dict = Depends(verify_token),
-):
+async def youtube_transcript(request: YouTubeRequest):
     try:
         from youtube_transcript_api import (  # noqa: PLC0415
             YouTubeTranscriptApi,
@@ -468,15 +433,11 @@ async def youtube_transcript(
     if not raw_text.strip():
         raise HTTPException(status_code=422, detail="Transcript appears to be empty.")
 
-    logger.info(
-        f"[{payload.get('username', '?')}] YouTube: {video_id} — {len(raw_text)} chars raw"
-    )
+    logger.info(f"YouTube: {video_id} — {len(raw_text)} chars raw")
 
     cleaned, available = await _ollama_clean(raw_text, prompt=_CLEAN_SYSTEM_PROMPT)
 
-    logger.info(
-        f"[{payload.get('username', '?')}] YouTube: cleaned {len(raw_text)} → {len(cleaned)} chars"
-    )
+    logger.info(f"YouTube: cleaned {len(raw_text)} → {len(cleaned)} chars")
 
     return YouTubeResponse(cleaned_text=cleaned, video_id=video_id, available=available)
 
@@ -495,11 +456,8 @@ if __name__ == "__main__":
   Starting server on http://localhost:8000
   API docs available at http://localhost:8000/docs
 
-  Login endpoint:    POST http://localhost:8000/login
-  TTS endpoint:      POST http://localhost:8000/api/tts  [JWT required]
+  TTS endpoint:      POST http://localhost:8000/api/tts
   Voices endpoint:   GET  http://localhost:8000/api/voices
-
-  Default credentials: vocably / vocably2026
 
   Press Ctrl+C to stop the server
 """)
