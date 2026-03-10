@@ -4,6 +4,10 @@ echo   Vocably - Starting All Services
 echo ============================================================
 echo.
 
+REM Start Ollama
+echo Starting Ollama...
+start "Vocably Ollama" cmd /k "ollama serve"
+
 REM Start the backend in a new window
 echo Starting TTS Backend...
 start "Vocably Backend" cmd /k "cd /d %~dp0backend && run.bat"
