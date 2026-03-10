@@ -258,7 +258,7 @@ async def list_voices():
 
 async def _ollama_clean(text: str, prompt: str = _CLEAN_SYSTEM_PROMPT) -> tuple[str, bool]:
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
                 f"{_OLLAMA_URL}/api/chat",
                 json={
@@ -268,6 +268,7 @@ async def _ollama_clean(text: str, prompt: str = _CLEAN_SYSTEM_PROMPT) -> tuple[
                         {"role": "user", "content": text},
                     ],
                     "stream": False,
+                    "think": False,
                 },
             )
             response.raise_for_status()
