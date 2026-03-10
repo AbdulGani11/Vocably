@@ -67,7 +67,6 @@ const Hero = () => {
     setCleanNotice(null);
     setSelectedUseCase(null);
 
-    const token = sessionStorage.getItem("vocably_token");
     const isPDF = file.name.toLowerCase().endsWith(".pdf");
 
     try {
@@ -78,7 +77,6 @@ const Hero = () => {
         formData.append("file", file);
         const response = await fetch(`${TTS_BACKEND_URL}/api/extract-pdf`, {
           method: "POST",
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
           body: formData,
         });
         if (!response.ok) {
@@ -96,10 +94,7 @@ const Hero = () => {
 
         const response = await fetch(`${TTS_BACKEND_URL}/api/clean`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: rawText }),
         });
         if (response.ok) {
@@ -134,15 +129,10 @@ const Hero = () => {
     setCleanNotice(null);
     setSelectedUseCase(null);
 
-    const token = sessionStorage.getItem("vocably_token");
-
     try {
       const response = await fetch(`${TTS_BACKEND_URL}/api/youtube-transcript`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: youtubeUrl.trim() }),
       });
 
@@ -236,11 +226,14 @@ const Hero = () => {
                     <button
                       type="submit"
                       disabled={isFetchingYoutube || !youtubeUrl.trim()}
-                      className="text-[10px] md:text-xs text-neutral-400 hover:text-neutral-700 disabled:opacity-40 transition-colors shrink-0"
+                      className="flex items-center gap-1 text-[10px] md:text-xs text-neutral-400 hover:text-neutral-700 disabled:opacity-40 transition-colors shrink-0"
                       aria-label="Fetch transcript"
                     >
                       {isFetchingYoutube ? (
-                        <i className="ri-loader-4-line animate-spin"></i>
+                        <>
+                          <i className="ri-loader-4-line animate-spin"></i>
+                          <span className="hidden sm:inline">Fetching...</span>
+                        </>
                       ) : (
                         <i className="ri-arrow-right-line"></i>
                       )}

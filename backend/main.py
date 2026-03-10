@@ -373,7 +373,7 @@ async def extract_pdf(file: UploadFile = File(...)):
     if not raw_text.strip():
         raise HTTPException(status_code=422, detail="Could not extract any text from this PDF")
 
-    cleaned, available = await _ollama_clean(raw_text)
+    cleaned, available = await _ollama_clean(raw_text[:10000])
     logger.info(f"PDF extracted: {page_count}p via {method}, {len(raw_text)} → {len(cleaned)} chars")
     return PDFResponse(cleaned_text=cleaned, pages=page_count, method=method, available=available)
 
@@ -435,7 +435,7 @@ async def youtube_transcript(request: YouTubeRequest):
 
     logger.info(f"YouTube: {video_id} — {len(raw_text)} chars raw")
 
-    cleaned, available = await _ollama_clean(raw_text, prompt=_CLEAN_SYSTEM_PROMPT)
+    cleaned, available = await _ollama_clean(raw_text[:10000], prompt=_CLEAN_SYSTEM_PROMPT)
 
     logger.info(f"YouTube: cleaned {len(raw_text)} → {len(cleaned)} chars")
 
