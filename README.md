@@ -1,6 +1,6 @@
 # Vocably
 
-Full-stack text-to-speech web application powered by Kokoro-82M — React frontend, FastAPI backend, JWT-authenticated REST API, Docker containerized. Includes an Upload & Clean pipeline for processing transcripts and PDFs before generating speech. Runs locally via `start.bat` or deployed on Render (frontend) + Hugging Face Spaces (backend).
+Full-stack text-to-speech web application powered by Kokoro-82M — React frontend, FastAPI backend, Docker containerized. Includes an Upload & Clean pipeline for processing transcripts and PDFs before generating speech. Runs locally via `start.bat` or deployed on Render (frontend) + Hugging Face Spaces (backend).
 
 ## Live Deployment
 
@@ -15,9 +15,8 @@ Full-stack text-to-speech web application powered by Kokoro-82M — React fronte
 
 - **Frontend:** React 19, Tailwind CSS v4, Vite — deployed on Render
 - **Backend:** FastAPI + Uvicorn, Kokoro-82M (PyTorch) — deployed on Hugging Face Spaces
-- **Upload & Clean:** Ollama (qwen2.5:3b) — local AI for transcript and PDF cleanup before TTS
+- **Upload & Clean:** Ollama (qwen3.5:4b) — local AI for transcript and PDF cleanup before TTS
 - **YouTube Transcript:** `youtube-transcript-api` — scrapes closed-caption data directly from YouTube, no API key required
-- **Auth:** JWT Bearer — HS256 signed tokens, `sessionStorage`, FastAPI `Depends()` injection
 - **Infra:** Docker (`python:3.11-slim`, non-root user, layer-cached build)
 
 ## Architecture
@@ -25,23 +24,14 @@ Full-stack text-to-speech web application powered by Kokoro-82M — React fronte
 ```
 Browser (Render)
     │
-    ├── POST /login  ──► FastAPI (HF Spaces) ──► validate_credentials() ──► JWT
+    ├── POST /api/tts ──► Kokoro-82M ──► WAV
     │
-    ├── POST /api/tts ─► Authorization: Bearer <token> ──► verify_token() ──► Kokoro-82M ──► WAV
+    ├── POST /api/clean ──► detect format ──► parser + Ollama ──► clean text
     │
-    ├── POST /api/clean ─► Bearer <token> ──► detect format ──► parser + Ollama ──► clean text
+    ├── POST /api/extract-pdf ──► pymupdf / Tesseract OCR ──► Ollama ──► clean text
     │
-    ├── POST /api/extract-pdf ─► Bearer <token> ──► pymupdf / Tesseract OCR ──► Ollama ──► clean text
-    │
-    └── POST /api/youtube-transcript ─► Bearer <token> ──► extract video ID ──► youtube-transcript-api ──► Ollama ──► clean text
+    └── POST /api/youtube-transcript ──► extract video ID ──► youtube-transcript-api ──► Ollama ──► clean text
 ```
-
-## Authentication
-
-All `/api/*` requests require a signed JWT. The login endpoint issues an HS256 token (8h expiry) stored in `sessionStorage`.
-
-Default credentials: `vocably` / `vocably2026`
-Override via env vars: `VOCABLY_USERNAME`, `VOCABLY_PASSWORD`, `JWT_SECRET_KEY`
 
 ## Run Locally (Development)
 
@@ -75,7 +65,7 @@ Open [http://localhost:5173](http://localhost:5173)
 The app accepts `.txt`, `.md`, `.srt`, `.vtt`, and `.pdf` files. Before the text reaches the TTS engine, a two-stage cleaning pipeline runs:
 
 1. **Format parser (deterministic)** — strips timestamps, cue IDs, HTML tags from SRT/VTT; uses Tesseract OCR for scanned PDFs
-2. **Ollama LLM (qwen2.5:3b)** — removes spoken filler words and cleans prose structure
+2. **Ollama LLM (qwen3.5:4b)** — removes spoken filler words and cleans prose structure
 
 Ollama is optional. If it is not running, the parsed text is loaded as-is.
 
@@ -96,7 +86,7 @@ docker-compose down
 
 ## Documentation
 
-See [Documents/documentation.md](Documents/documentation.md) — full technical reference covering setup, architecture, authentication, the Upload & Clean pipeline, AI concepts, Docker, deployment, and troubleshooting.
+See [Documents/documentation.md](Documents/documentation.md) — full technical reference covering setup, architecture, the Upload & Clean pipeline, AI concepts, Docker, deployment, and troubleshooting.
 
 ## License
 
