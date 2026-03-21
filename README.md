@@ -28,8 +28,15 @@ Browser (localhost:5173)
 **Prerequisites:** Node.js 18+, Python 3.10+, 4 GB RAM (model downloads ~500 MB on first run)
 
 **Optional but recommended:**
-- [Ollama](https://ollama.com) with `qwen2.5:3b` pulled — required for Upload & Clean and YouTube Transcript features
-- [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) — required for scanned PDF extraction only
+- [Ollama](https://ollama.com) — required for Upload & Clean and YouTube Transcript features. After installing, pull the model:
+  ```bash
+  ollama pull qwen2.5:3b
+  ```
+  Ollama must be running before starting the backend. On Windows it starts automatically after install. On Linux/Mac, run `ollama serve` in a terminal first.
+- [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) — required for scanned PDF extraction only (digital PDFs work without it).
+  - **Windows:** Install to the default path `C:\Program Files\Tesseract-OCR\` — the path in `backend/main.py` is hardcoded there.
+  - **Linux:** `sudo apt-get install -y tesseract-ocr` — then remove the hardcoded path line from `backend/main.py` (pytesseract finds it automatically).
+  - **Mac:** `brew install tesseract` — same as Linux.
 
 ```bash
 git clone https://github.com/AbdulGani11/Vocably.git
@@ -64,6 +71,20 @@ cd ..
 ```
 
 Open [http://localhost:5173](http://localhost:5173)
+
+## Feature Requirements
+
+| Feature | Works locally? | Requires |
+|---|---|---|
+| TTS (text → audio) | Yes | Python venv |
+| Voice + speed selection | Yes | Nothing extra |
+| YouTube transcript fetch | Yes | Nothing extra |
+| YouTube transcript clean | Yes | Ollama + `qwen2.5:3b` |
+| Upload & Clean (SRT/VTT/TXT/MD) | Yes | Ollama + `qwen2.5:3b` |
+| PDF extract (digital) | Yes | Nothing extra |
+| PDF extract (scanned/OCR) | Windows only | Tesseract at default path |
+
+---
 
 ## Upload & Clean
 
