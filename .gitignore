@@ -32,8 +32,6 @@ TECH_STACK.md
 VOCABLY_GUIDE.md
 Untitled*.md
 
-# ── Documents folder — ignore all except the main technical reference ─────────
-Documents/*
-!Documents/documentation.md
-!Documents/styles.md
-!Documents/production-gaps.md
+# ── Local documents and writing — never commit ────────────────────────────────
+Documents/
+draft.dev/

@@ -27,19 +27,40 @@ Browser (localhost:5173)
 
 **Prerequisites:** Node.js 18+, Python 3.10+, 4 GB RAM (model downloads ~500 MB on first run)
 
+**Optional but recommended:**
+- [Ollama](https://ollama.com) with `qwen2.5:3b` pulled — required for Upload & Clean and YouTube Transcript features
+- [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) — required for scanned PDF extraction only
+
 ```bash
 git clone https://github.com/AbdulGani11/Vocably.git
 cd Vocably
 ```
 
+**Install backend dependencies (first time only):**
+
+```bash
+cd backend
+python -m venv venv
+venv\Scripts\pip install -r requirements.txt
+cd ..
+```
+
+**Install frontend dependencies (first time only):**
+
+```bash
+cd frontend
+npm install
+cd ..
+```
+
 **Environment file (already in the repo — no secrets):**
 
-`.env.development` — loaded automatically by `npm run dev`, points to `localhost:8000`.
+`frontend/.env.development` — loaded automatically by `npm run dev`, points to `localhost:8000`.
 
 **Windows:**
 
 ```bash
-.\start.bat      # starts backend + frontend together
+.\start.bat      # starts Ollama, backend, and frontend together
 ```
 
 Open [http://localhost:5173](http://localhost:5173)
