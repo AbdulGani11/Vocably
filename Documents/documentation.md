@@ -56,13 +56,16 @@ Every tool in this project was chosen deliberately. This section explains each o
 
 **Why we chose it:** React's component model makes it easy to isolate the TTS card, the voice selector, the upload button, and the status banner into separate pieces that each manage their own state. The `useState` and `useEffect` hooks let us express complex UI logic — like polling the server every 2.5 seconds — as straightforward functions.
 
-**How it's used in Vocably:** The entire UI is built from React components. `Hero.jsx` renders the main TTS card. `App.jsx` acts as the authentication gate — it checks `sessionStorage` for a token and renders either the `Login` page or the `Hero` page accordingly.
+**How it's used in Vocably:** The entire UI is built from React components. `Hero.jsx` renders the main TTS card. `App.jsx` is the root component — it renders the `Navbar` and `Hero` directly, with no authentication gate.
 
 ```jsx
-// App.jsx — the root authentication gate
-const isAuthenticated = !!sessionStorage.getItem("vocably_token");
-
-return isAuthenticated ? <Hero /> : <Login />;
+// App.jsx — renders directly to Hero, no login required
+return (
+  <>
+    <Navbar />
+    <Hero />
+  </>
+);
 ```
 
 ---
@@ -123,7 +126,7 @@ This is why the frontend knows which backend URL to call even after it's deploye
 
 **Why we chose it:** The alternative for a Python TTS backend would be Flask or Django. Flask is synchronous by default — running Kokoro inside it would block the entire server for ~11 seconds per request. FastAPI is built on ASGI (the async equivalent of WSGI), which means it can serve multiple concurrent requests while one is waiting for the TTS thread. Django is too large for a focused API backend.
 
-**How it's used in Vocably:** FastAPI handles all five endpoints: `/login`, `/api/tts`, `/api/voices`, `/api/clean`, and `/api/extract-pdf`. Pydantic models define the shape of every request and response.
+**How it's used in Vocably:** FastAPI handles seven endpoints: `/health`, `/api/tts`, `/api/tts/stream`, `/api/voices`, `/api/clean`, `/api/extract-pdf`, and `/api/youtube-transcript`. Pydantic models define the shape of every request and response.
 
 ```python
 # Pydantic model — FastAPI validates the incoming JSON against this automatically
@@ -133,9 +136,9 @@ class TTSRequest(BaseModel):
     speed: Optional[float] = 1.0
 
 @app.post("/api/tts", response_model=TTSResponse)
-async def generate_speech(request: TTSRequest, payload: dict = Depends(verify_token)):
+async def generate_speech(request: TTSRequest):
     # request.text, request.voice, request.speed are already validated
-    # payload contains {"username": "vocably"} — already decoded from the JWT
+    # No authentication required — app runs locally
 ```
 
 If the frontend sends `speed: "fast"` instead of a number, FastAPI automatically returns HTTP 422 before the function even runs.
@@ -166,13 +169,14 @@ from kokoro import KPipeline
 _pipeline = KPipeline(lang_code="a")  # "a" = American English
 
 # Generation — yields (graphemes, phonemes, audio_chunk) tuples
-for _, _, audio in _pipeline(text, voice="af_heart", speed=1.0, split_pattern=r'\n+'):
+for _, _, audio in _pipeline(text, voice="af_heart", speed=1.0,
+                              split_pattern=r'\n+|(?<=[.!?])\s+'):
     chunks.append(audio)
 
 audio_np = np.concatenate(chunks)  # single numpy array of float32 samples
 ```
 
-The `split_pattern=r'\n+'` argument tells Kokoro to split long texts on paragraph breaks and process them as separate segments, which avoids memory issues with very long inputs.
+The `split_pattern=r'\n+|(?<=[.!?])\s+'` argument tells Kokoro to split long texts on paragraph breaks and sentence-ending punctuation, processing them as separate segments. The lookbehind `(?<=[.!?])` splits after punctuation without consuming it, so it stays attached to the preceding sentence. This improves prosody at sentence boundaries and avoids memory issues with very long inputs.
 
 ---
 
@@ -288,16 +292,14 @@ audio_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
 
 ```
 1. User clicks Play
-2. useTTS.js reads JWT from sessionStorage
-3. fetch("POST /api/tts", { text, voice, speed, Authorization: Bearer <token> })
-4. FastAPI: Depends(verify_token) runs first — decodes JWT, raises 401 if invalid
-5. FastAPI: asyncio.wait_for(loop.run_in_executor(_executor, _generate_sync, ...), timeout=300)
+2. useTTS.js calls fetch("POST /api/tts/stream", { text, voice, speed })
+3. FastAPI: asyncio.wait_for(loop.run_in_executor(_executor, _generate_sync, ...), timeout=600)
    - run_in_executor offloads the blocking Kokoro call to a background thread
    - The async event loop remains unblocked and can serve other requests
-6. _generate_sync: Kokoro pipeline → numpy array → SoundFile WAV → base64 string
-7. FastAPI returns { audio_base64, sample_rate: 24000, format: "wav" }
-8. Browser: atob(audio_base64) → Uint8Array → Blob("audio/wav") → URL.createObjectURL
-9. new Audio(blobUrl).play()
+4. _generate_sync: Kokoro pipeline → numpy array → SoundFile WAV → base64 string
+5. FastAPI streams NDJSON chunks — one per sentence — as they are produced
+6. Browser: accumulates line-delimited chunks, decodes each WAV via AudioContext
+7. AudioBufferSourceNode.start(when) schedules gapless playback per chunk
 ```
 
 ### 3.3 Backend readiness flow
@@ -329,36 +331,35 @@ The `_ready` flag is critical. Without it, `/health` would return healthy as soo
 Vocably/
 ├── backend/
 │   ├── main.py             # FastAPI server — all endpoints, Kokoro pipeline, Upload & Clean
-│   ├── requirements.txt    # Python dependencies (pinned versions)
+│   ├── requirements.txt    # Python dependencies
 │   ├── run.bat             # Backend startup script (Windows, local dev)
 │   └── venv/               # Python virtual environment (local dev)
-├── src/
-│   ├── components/
-│   │   ├── Hero/
-│   │   │   └── DropupSelector.jsx   # Reusable dropup for Voice and Speed
-│   │   └── Navbar/
-│   │       ├── FlyoutLink.jsx       # Animated nav links with hover flyout
-│   │       ├── Logo.jsx             # App logo
-│   │       ├── Navbar.jsx           # Navigation bar + logout button
-│   │       └── NavContent.jsx       # Nav menu content
-│   ├── hooks/
-│   │   ├── useAuth.js      # Login/logout, JWT storage in sessionStorage
-│   │   └── useTTS.js       # TTS API calls, audio playback, download, health polling
-│   ├── pages/
-│   │   ├── Hero.jsx        # Main TTS page — card, upload, voice selector, play
-│   │   └── Login.jsx       # Authentication gate
-│   ├── utils/
-│   │   └── constants.js    # Voice list, speed presets, use case examples
-│   ├── App.jsx             # Root: reads sessionStorage → renders Login or Hero
-│   ├── index.css           # Global styles
-│   └── main.jsx            # React entry point
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── Hero/
+│   │   │   │   └── DropupSelector.jsx   # Reusable dropup for Voice and Speed
+│   │   │   └── Navbar/
+│   │   │       ├── FlyoutLink.jsx       # Animated nav links with hover flyout
+│   │   │       ├── Logo.jsx             # App logo
+│   │   │       ├── Navbar.jsx           # Navigation bar
+│   │   │       └── NavContent.jsx       # Nav menu content
+│   │   ├── hooks/
+│   │   │   └── useTTS.js       # TTS API calls, audio playback, download, health polling
+│   │   ├── pages/
+│   │   │   └── Hero.jsx        # Main TTS page — card, upload, voice selector, play
+│   │   ├── utils/
+│   │   │   └── constants.js    # Voice list, speed presets, use case examples
+│   │   ├── App.jsx             # Root: renders Navbar + Hero directly
+│   │   ├── index.css           # Global styles
+│   │   └── main.jsx            # React entry point
+│   ├── .env.development        # VITE_TTS_BACKEND_URL=http://localhost:8000
+│   ├── package.json
+│   └── vite.config.js
 ├── Documents/
 │   └── documentation.md    # This file
 ├── mock_data/              # Sample files for testing Upload & Clean
-├── start.bat               # Combined startup script (local dev)
-├── .env.development        # VITE_TTS_BACKEND_URL=http://localhost:8000
-├── package.json
-└── vite.config.js
+└── start.bat               # Combined startup script — starts Ollama, backend, frontend
 ```
 
 ---
@@ -394,6 +395,7 @@ cd backend
 **Terminal 2 — Frontend:**
 
 ```bash
+cd frontend
 npm run dev
 ```
 
@@ -428,13 +430,12 @@ After the first run, startup takes ~15 seconds (model and spacy are cached local
 
 ### Basic TTS flow
 
-1. Open http://localhost:5173 → Login page appears
-2. Sign in with `vocably` / `vocably2026`
-3. Wait for the warming-up banner to disappear (Play button goes from grey to black)
-4. Type or paste text — up to 10,000 characters
-5. Select a voice and speed using the selectors in the bottom-left
-6. Click the Play button (black circle)
-7. Audio plays automatically; click again to stop
+1. Open http://localhost:5173 → Hero page loads directly (no login required)
+2. Wait for the warming-up banner to disappear (Play button goes from grey to black)
+3. Type or paste text — up to 10,000 characters
+4. Select a voice and speed using the selectors in the bottom-left
+5. Click the Play button (black circle)
+6. Audio plays automatically; click again to stop
 
 ### Available voices
 
@@ -917,7 +918,7 @@ async def lifespan(app: FastAPI):
 loop = asyncio.get_running_loop()
 audio_b64, sample_rate = await asyncio.wait_for(
     loop.run_in_executor(_executor, _generate_sync, text, voice, speed),
-    timeout=300.0,  # 5-minute hard limit — prevents infinite hang
+    timeout=600.0,  # 10-minute hard limit — prevents infinite hang
 )
 ```
 
@@ -1062,7 +1063,7 @@ useEffect(() => {
 }, []);  // empty dependency array = runs once when component mounts
 ```
 
-The `return () => clearInterval(intervalId)` is the cleanup function. React calls it when the component unmounts — this prevents the interval from continuing to fire after the user logs out or the tab is closed. Without cleanup, you would get "memory leaks" — functions running in the background updating state that no longer exists.
+The `return () => clearInterval(intervalId)` is the cleanup function. React calls it when the component unmounts — this prevents the interval from continuing to fire after the component is removed from the DOM or the tab is closed. Without cleanup, you would get "memory leaks" — functions running in the background updating state that no longer exists.
 
 ### 11.3 Blob URL memory management
 
@@ -1083,10 +1084,7 @@ The `useRef` hook is used here instead of `useState` because `audioBlobUrl` does
 Vite reads `.env.development` when `npm run dev` is running and `.env.production` when `npm run build` is run. Variables prefixed with `VITE_` are injected into the JavaScript bundle at build time.
 
 ```
-# .env.development
-VITE_TTS_BACKEND_URL=http://localhost:8000
-
-# .env.production
+# frontend/.env.development  (the only env file in this project)
 VITE_TTS_BACKEND_URL=http://localhost:8000
 ```
 
@@ -1161,7 +1159,7 @@ for graphemes, phonemes, audio_chunk in pipeline(
     text="Hello world",
     voice="af_heart",
     speed=1.0,
-    split_pattern=r'\n+',   # split on paragraph breaks
+    split_pattern=r'\n+|(?<=[.!?])\s+',  # split on paragraph breaks and sentence boundaries
 ):
     # graphemes: original text segment
     # phonemes: IPA representation (e.g. hɛloʊ wɜrld)
@@ -1189,13 +1187,12 @@ HTTP status codes are three-digit numbers that indicate the result of a request.
 
 | Code | Category      | Meaning               | When Vocably uses it                          |
 | ---- | ------------- | --------------------- | --------------------------------------------- |
-| 200  | Success       | OK                    | Successful login, TTS generation, or cleanup  |
-| 400  | Client error  | Bad Request           | Empty text field, or unsupported file type    |
-| 401  | Client error  | Unauthorized          | Missing, invalid, or expired JWT              |
-| 422  | Client error  | Unprocessable Entity  | Request body type mismatch (Pydantic failure) |
-| 501  | Server error  | Not Implemented       | PDF endpoint called without pymupdf installed |
+| 200  | Success       | OK                    | Successful TTS generation, cleanup, or transcript fetch |
+| 400  | Client error  | Bad Request           | Empty text field, unsupported file type, or invalid YouTube URL |
+| 422  | Client error  | Unprocessable Entity  | Request body type mismatch (Pydantic), or video has no captions |
+| 501  | Server error  | Not Implemented       | PDF or YouTube endpoint called without required library installed |
 | 503  | Server error  | Service Unavailable   | `/api/tts` called before pipeline is ready   |
-| 504  | Server error  | Gateway Timeout       | Kokoro generation exceeded 300s timeout       |
+| 504  | Server error  | Gateway Timeout       | Kokoro generation exceeded 600s timeout       |
 | 500  | Server error  | Internal Server Error | Unexpected exception during TTS or cleanup    |
 
 ---
@@ -1211,7 +1208,7 @@ If the banner shows "Backend is offline" instead of "warming up", the backend se
 ### "Cannot connect to TTS server"
 
 - Confirm the backend is running: visit http://localhost:8000/health in a browser
-- If the health check works but the frontend cannot connect, check that `.env.development` contains `VITE_TTS_BACKEND_URL=http://localhost:8000`
+- If the health check works but the frontend cannot connect, check that `frontend/.env.development` contains `VITE_TTS_BACKEND_URL=http://localhost:8000`
 
 ### TTS generation times out (504)
 
@@ -1266,9 +1263,9 @@ Normal. Kokoro uses all available CPU cores during the single forward pass. Usag
 | ------------------------ | -------------------------------------- | ---------------- |
 | Start everything         | `.\start.bat`                          | Project root     |
 | Start backend only       | `.\run.bat`                            | `backend/`       |
-| Start frontend only      | `npm run dev`                          | Project root     |
-| Build frontend           | `npm run build`                        | Project root     |
-| Install frontend deps    | `npm install`                          | Project root     |
+| Start frontend only      | `npm run dev`                          | `frontend/`      |
+| Build frontend           | `npm run build`                        | `frontend/`      |
+| Install frontend deps    | `npm install`                          | `frontend/`      |
 
 ### Python virtualenv
 
@@ -1341,7 +1338,7 @@ Pre-warming every voice would extend startup by several minutes (15 voices × ~3
 
 **Q: What happens if two users click Play at the same time?**
 
-The second request is queued. `ThreadPoolExecutor(max_workers=1)` ensures only one Kokoro generation runs at a time. The second request waits in line until the first generation finishes, then starts. The 300-second `asyncio.wait_for` timeout applies per request, so if the queue grows large, earlier requests might time out.
+The second request is queued. `ThreadPoolExecutor(max_workers=1)` ensures only one Kokoro generation runs at a time. The second request waits in line until the first generation finishes, then starts. The 600-second `asyncio.wait_for` timeout applies per request, so if the queue grows very large, earlier requests might time out.
 
 ---
 
