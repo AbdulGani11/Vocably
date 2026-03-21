@@ -9,7 +9,7 @@ dist/
 .env            # base env — may contain secrets
 .env.local      # machine-local overrides
 .env.*.local    # machine-local mode overrides
-# .env.development and .env.production are committed — they contain only public URLs
+# .env.development is committed — contains only public localhost URL
 
 # ── Logs ──────────────────────────────────────────────────────────────────────
 *.log
