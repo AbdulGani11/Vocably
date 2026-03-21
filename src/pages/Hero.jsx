@@ -46,6 +46,7 @@ const Hero = () => {
   const [showYoutubeInput, setShowYoutubeInput] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [isFetchingYoutube, setIsFetchingYoutube] = useState(false);
+  const [ytLoadingLabel, setYtLoadingLabel] = useState("Fetching...");
 
   const ACCEPTED_EXTENSIONS = [".txt", ".md", ".srt", ".vtt", ".pdf"];
 
@@ -90,7 +91,11 @@ const Hero = () => {
         if (data.available) setTimeout(() => setCleanNotice(null), 4000);
       } else {
         const rawText = await file.text();
-        if (!rawText.trim()) { setIsCleaning(false); return; }
+        if (!rawText.trim()) {
+          setCleanNotice({ type: "warn", message: "File is empty — nothing to load." });
+          setIsCleaning(false);
+          return;
+        }
 
         const response = await fetch(`${TTS_BACKEND_URL}/api/clean`, {
           method: "POST",
@@ -126,8 +131,10 @@ const Hero = () => {
     if (!youtubeUrl.trim()) return;
 
     setIsFetchingYoutube(true);
+    setYtLoadingLabel("Fetching...");
     setCleanNotice(null);
     setSelectedUseCase(null);
+    const ytLabelTimer = setTimeout(() => setYtLoadingLabel("Cleaning with AI..."), 4000);
 
     try {
       const response = await fetch(`${TTS_BACKEND_URL}/api/youtube-transcript`, {
@@ -154,6 +161,7 @@ const Hero = () => {
     } catch (err) {
       setCleanNotice({ type: "warn", message: err.message || "Failed to fetch transcript." });
     } finally {
+      clearTimeout(ytLabelTimer);
       setIsFetchingYoutube(false);
     }
   };
@@ -232,7 +240,7 @@ const Hero = () => {
                       {isFetchingYoutube ? (
                         <>
                           <i className="ri-loader-4-line animate-spin"></i>
-                          <span className="hidden sm:inline">Fetching...</span>
+                          <span className="hidden sm:inline">{ytLoadingLabel}</span>
                         </>
                       ) : (
                         <i className="ri-arrow-right-line"></i>
@@ -397,6 +405,13 @@ const Hero = () => {
                   </button>
                 </div>
               </div>
+
+              {!error && text.length > 4000 && !isSpeaking && (
+                <p className="mt-3 text-[11px] text-neutral-400 text-right">
+                  <i className="ri-time-line mr-1"></i>
+                  Long text (~{Math.round(text.length / 1000)}k chars) — generation may take 1–3 min.
+                </p>
+              )}
 
               {error && (
                 <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">

@@ -11,10 +11,6 @@ uvicorn[standard]==0.40.0
 soundfile==0.13.1
 numpy>=1.20.0
 
-# Authentication — JWT signing and password utilities
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-
 # HTTP client — used by /api/clean to call Ollama locally
 httpx==0.28.1
 

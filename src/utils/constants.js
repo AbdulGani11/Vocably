@@ -56,36 +56,3 @@ export const USE_CASES = [
         text: "You've been telling yourself you'll start tomorrow for 847 days. I know this because that's the average number of days people delay a goal they care about. The difference between the person you are and the person you want to be isn't talent, connections, or money. It's a decision you've been refusing to make.",
     },
 ];
-
-export const EXAMPLES = [
-    {
-        id: "meta",
-        label: "Self-Aware",
-        icon: "ri-lightbulb-line",
-        text: "I know what you're thinking: 'This is just a computer.' But listen closely to the pauses, the breath, and the rhythm. I'm not just reading text; I'm telling a story. Go ahead, clear this box and give me something challenging to say.",
-    },
-    {
-        id: "storyteller",
-        label: "Storyteller",
-        icon: "ri-quill-pen-line",
-        text: "The old lighthouse stood defiant against the crashing waves, a solitary beacon in the endless grey. Close your eyes and listen. Can you see the storm? That is the power of a perfect voice—it doesn't just read words; it paints pictures.",
-    },
-    {
-        id: "creator",
-        label: "Creator",
-        icon: "ri-video-line",
-        text: "Stop wasting hours staring at a microphone. Whether you're explaining quantum physics or reviewing the latest tech, I can narrate your script in seconds with zero mistakes. Ready to create your next viral video? Type your script here.",
-    },
-    {
-        id: "conversational",
-        label: "Friendly",
-        icon: "ri-chat-smile-3-line",
-        text: "Hello there. I promise I haven't had any coffee today, but I still sound this energetic. I can be your news anchor, your storyteller, or the voice of your brand. Type something funny, or maybe something serious—I can handle both.",
-    },
-    {
-        id: "fact",
-        label: "Fact Hook",
-        icon: "ri-brain-line",
-        text: "Did you know the human ear can detect sound in less than 0.05 seconds? That's faster than you can blink. You need a voice that makes an instant impact. Type your message here and let's see if we can capture your audience's attention just as fast.",
-    },
-];

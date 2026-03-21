@@ -1,28 +1,18 @@
 # Vocably
 
-Full-stack text-to-speech web application powered by Kokoro-82M — React frontend, FastAPI backend, Docker containerized. Includes an Upload & Clean pipeline for processing transcripts and PDFs before generating speech. Runs locally via `start.bat` or deployed on Render (frontend) + Hugging Face Spaces (backend).
-
-## Live Deployment
-
-| Layer           | URL                                                   |
-| --------------- | ----------------------------------------------------- |
-| **Frontend**    | https://vocably.onrender.com                          |
-| **Backend API** | https://gilfoyle99213-vocably-backend.hf.space        |
-| **API Health**  | https://gilfoyle99213-vocably-backend.hf.space/health |
-| **API Docs**    | https://gilfoyle99213-vocably-backend.hf.space/docs   |
+Full-stack text-to-speech web application powered by Kokoro-82M — React frontend, FastAPI backend. Includes an Upload & Clean pipeline for processing transcripts and PDFs before generating speech. Runs locally via `start.bat`.
 
 ## Tech Stack
 
-- **Frontend:** React 19, Tailwind CSS v4, Vite — deployed on Render
-- **Backend:** FastAPI + Uvicorn, Kokoro-82M (PyTorch) — deployed on Hugging Face Spaces
-- **Upload & Clean:** Ollama (qwen3.5:4b) — local AI for transcript and PDF cleanup before TTS
+- **Frontend:** React 19, Tailwind CSS v4, Vite
+- **Backend:** FastAPI + Uvicorn, Kokoro-82M (PyTorch)
+- **Upload & Clean:** Ollama (qwen2.5:3b) — local AI for transcript and PDF cleanup before TTS
 - **YouTube Transcript:** `youtube-transcript-api` — scrapes closed-caption data directly from YouTube, no API key required
-- **Infra:** Docker (`python:3.11-slim`, non-root user, layer-cached build)
 
 ## Architecture
 
 ```
-Browser (Render)
+Browser (localhost:5173)
     │
     ├── POST /api/tts ──► Kokoro-82M ──► WAV
     │
@@ -42,15 +32,9 @@ git clone https://github.com/AbdulGani11/Vocably.git
 cd Vocably
 ```
 
-**Environment files (already in the repo — no secrets):**
+**Environment file (already in the repo — no secrets):**
 
-| File               | Used when       | Contains                         |
-| ------------------ | --------------- | -------------------------------- |
-| `.env.development` | `npm run dev`   | `localhost:8000` — local backend |
-| `.env.production`  | `npm run build` | HF Spaces URL — cloud backend    |
-
-> These files are committed because they contain **no secrets** — only public URLs.
-> Vite automatically picks the correct file based on the command.
+`.env.development` — loaded automatically by `npm run dev`, points to `localhost:8000`.
 
 **Windows:**
 
@@ -65,7 +49,7 @@ Open [http://localhost:5173](http://localhost:5173)
 The app accepts `.txt`, `.md`, `.srt`, `.vtt`, and `.pdf` files. Before the text reaches the TTS engine, a two-stage cleaning pipeline runs:
 
 1. **Format parser (deterministic)** — strips timestamps, cue IDs, HTML tags from SRT/VTT; uses Tesseract OCR for scanned PDFs
-2. **Ollama LLM (qwen3.5:4b)** — removes spoken filler words and cleans prose structure
+2. **Ollama LLM (qwen2.5:3b)** — removes spoken filler words and cleans prose structure
 
 Ollama is optional. If it is not running, the parsed text is loaded as-is.
 
@@ -75,18 +59,9 @@ Paste any YouTube URL into the YouTube input in the card header. The backend ext
 
 Supports URL formats: `watch?v=`, `youtu.be/`, `/shorts/`, `/embed/`, `/live/`
 
-## Docker (Backend)
-
-> **Beginners:** You do **not** need Docker for daily development. Use `.\start.bat` — it handles everything. Docker is only needed to test the containerized backend locally.
-
-```bash
-docker-compose up --build   # local container (port 8000)
-docker-compose down
-```
-
 ## Documentation
 
-See [Documents/documentation.md](Documents/documentation.md) — full technical reference covering setup, architecture, the Upload & Clean pipeline, AI concepts, Docker, deployment, and troubleshooting.
+See [Documents/documentation.md](Documents/documentation.md) — full technical reference covering setup, architecture, the Upload & Clean pipeline, AI concepts, and troubleshooting.
 
 ## License
 

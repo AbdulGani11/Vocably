@@ -4,9 +4,14 @@ echo   Vocably - Starting All Services
 echo ============================================================
 echo.
 
-REM Start Ollama
-echo Starting Ollama...
-start "Vocably Ollama" cmd /k "ollama serve"
+REM Start Ollama (skip if already running on port 11434)
+netstat -ano | findstr ":11434" >nul 2>&1
+if errorlevel 1 (
+    echo Starting Ollama...
+    start "Vocably Ollama" cmd /k "ollama serve"
+) else (
+    echo Ollama already running.
+)
 
 REM Start the backend in a new window
 echo Starting TTS Backend...

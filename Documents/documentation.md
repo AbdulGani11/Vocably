@@ -13,19 +13,18 @@ A single reference that covers everything about Vocably: what it is, why every t
 5. [Running Locally](#5-running-locally)
 6. [First Run Expectations](#6-first-run-expectations)
 7. [Using the Application](#7-using-the-application)
-8. [Authentication — JWT from First Principles](#8-authentication--jwt-from-first-principles)
+8. [Streaming TTS — Architecture & Implementation](#8-streaming-tts--architecture--implementation)
 9. [Upload & Clean — The Text Preparation Pipeline](#9-upload--clean--the-text-preparation-pipeline)
 10. [Backend Deep Dive — FastAPI](#10-backend-deep-dive--fastapi)
 11. [Frontend Deep Dive — React & Vite](#11-frontend-deep-dive--react--vite)
 12. [AI & ML Concepts — Kokoro-82M](#12-ai--ml-concepts--kokoro-82m)
-13. [Docker & Containerization](#13-docker--containerization)
-14. [Cloud Deployment — Render + Hugging Face Spaces](#14-cloud-deployment--render--hugging-face-spaces)
-15. [HTTP Status Codes Reference](#15-http-status-codes-reference)
+13. [HTTP Status Codes Reference](#15-http-status-codes-reference)
 16. [Troubleshooting](#16-troubleshooting)
 17. [Performance Notes](#17-performance-notes)
 18. [Quick Reference — Commands](#18-quick-reference--commands)
 19. [FAQ](#19-faq)
 20. [Code Reference — Module Design Notes](#20-code-reference--module-design-notes)
+21. [Streaming TTS — Web Audio API Reference](#21-streaming-tts--web-audio-api-reference)
 
 ---
 
@@ -39,12 +38,9 @@ Most tutorial TTS projects are a single Python script that generates a WAV file.
 
 | Concern              | How Vocably handles it                                   |
 | -------------------- | -------------------------------------------------------- |
-| Security             | Every TTS request requires a signed JWT; unauthenticated requests are rejected with HTTP 401 |
 | Concurrency          | Kokoro runs in a thread pool, so the HTTP server stays responsive while audio is generating |
 | Startup safety       | The Play button stays disabled until the server is fully ready (model loaded, voice warmed up) |
 | Text preprocessing   | Uploaded transcripts and PDFs are cleaned by an LLM before reaching the TTS engine |
-| Deployment           | Frontend on a CDN, backend in a Docker container — each hosted on its optimal platform |
-| Portability          | Docker packages the backend with all dependencies so it runs identically locally and in the cloud |
 
 ---
 
@@ -152,7 +148,7 @@ If the frontend sends `speed: "fast"` instead of a number, FastAPI automatically
 
 **Why we chose it:** Uvicorn is the recommended ASGI server for FastAPI. It uses `asyncio` natively and supports `--reload` for automatic restart during development. The `[standard]` extras install `uvloop` (a faster event loop) and `websockets` support.
 
-**How it's used in Vocably:** `main.py` calls `uvicorn.run("main:app", host="0.0.0.0", port=8000)` as its entry point. In Docker, the Dockerfile runs Uvicorn directly: `CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-7860}`.
+**How it's used in Vocably:** `main.py` calls `uvicorn.run("main:app", host="0.0.0.0", port=8000)` as its entry point.
 
 ---
 
@@ -205,17 +201,7 @@ async with httpx.AsyncClient(timeout=60.0) as client:
 
 ---
 
-### 2.8 python-jose + passlib
-
-**What it is:** `python-jose` is a Python implementation of JWT (JSON Web Token) — it creates and verifies signed tokens. `passlib` is a password hashing library; it is included as a dependency of the auth system.
-
-**Why we chose it:** JWT authentication is the industry standard for securing stateless REST APIs. The alternative — server-side sessions — requires the server to remember who is logged in, which does not work well when the server can restart at any time (as happens on Hugging Face Spaces). With JWT, the token itself contains the user's identity and expiry, so the server needs no database.
-
-**How it's used in Vocably:** `auth.py` uses `jose.jwt.encode()` to create tokens and `jose.jwt.decode()` to verify them. Full details in [Section 8](#8-authentication--jwt-from-first-principles).
-
----
-
-### 2.9 PyMuPDF (fitz) + Pytesseract
+### 2.8 PyMuPDF (fitz) + Pytesseract
 
 **What it is:** PyMuPDF (`fitz`) is a Python binding for the MuPDF library — it can parse PDF files and extract text from digital (text-layer) PDFs. Pytesseract is a Python wrapper for Google's Tesseract OCR engine, which reads text from images.
 
@@ -256,51 +242,35 @@ audio_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
 
 ---
 
-### 2.11 Docker
-
-**What it is:** Docker packages an application and all its dependencies into a self-contained unit called a container. The container runs identically on any machine that has Docker installed, regardless of the host OS or installed software.
-
-**Why we chose it:** The Kokoro backend has complex system-level dependencies: Python 3.11, `espeak-ng` (a grapheme-to-phoneme binary), and ~1.5 GB of Python packages. Installing all of these consistently on different machines is error-prone. Docker packages them once. Hugging Face Spaces specifically requires a Dockerfile to deploy custom ML backends.
-
-**How it's used in Vocably:** The `backend/Dockerfile` defines the container. `docker-compose.yml` runs it locally with a volume to cache the downloaded model. Details in [Section 13](#13-docker--containerization).
-
----
-
 ## 3. Architecture — How the System Fits Together
 
 ### 3.1 System layers
 
 ```
 ┌───────────────────────────────────────────────────────────────────┐
-│  BROWSER  ·  localhost:5173  (Vite dev) or vocably.onrender.com   │
+│  BROWSER  ·  localhost:5173                                       │
 │                                                                   │
-│  App.jsx        — auth gate: renders Login or Hero                │
-│  Login.jsx      — username/password form → POST /login            │
 │  Hero.jsx       — TTS card, upload button, voice/speed selectors  │
-│  Navbar.jsx     — nav links + logout                              │
+│  Navbar.jsx     — nav links                                       │
 │                                                                   │
-│  useAuth.js     — login/logout, stores JWT in sessionStorage      │
 │  useTTS.js      — calls /api/tts, decodes audio, polls /health    │
-└──────────────┬──────────────────────────────┬─────────────────────┘
-               │ POST /login                  │ POST /api/tts
-               │ POST /api/clean              │ POST /api/extract-pdf
-               │                              │ Authorization: Bearer <JWT>
-               ▼                              ▼
+└──────────────────────────────┬────────────────────────────────────┘
+                               │ POST /api/tts
+                               │ POST /api/clean
+                               │ POST /api/extract-pdf
+                               ▼
 ┌───────────────────────────────────────────────────────────────────┐
-│  BACKEND  ·  localhost:8000  (local) or gilfoyle99213-vocably-    │
-│             backend.hf.space  (cloud)                             │
-│  FastAPI + Uvicorn  ·  Docker: python:3.11-slim                   │
+│  BACKEND  ·  localhost:8000                                       │
+│  FastAPI + Uvicorn                                                │
 │                                                                   │
-│  POST /login         — validate credentials → JWT                 │
 │  GET  /health        — returns "healthy" only when _ready=True    │
-│  POST /api/tts       — JWT required → Kokoro → base64 WAV         │
+│  POST /api/tts       — Kokoro → base64 WAV                        │
 │  GET  /api/voices    — returns voice list                         │
-│  POST /api/clean     — JWT required → parse + Ollama → clean text │
-│  POST /api/extract-pdf — JWT required → pymupdf/OCR + Ollama      │
-│  POST /api/youtube-transcript — JWT required → youtube-transcript-api + Ollama │
+│  POST /api/clean     — parse + Ollama → clean text                │
+│  POST /api/extract-pdf — pymupdf/OCR + Ollama                     │
+│  POST /api/youtube-transcript — youtube-transcript-api + Ollama   │
 │                                                                   │
-│  auth.py    — SECRET_KEY, HS256 signing/verification              │
-│  CORS       — allows all origins (configurable for production)    │
+│  CORS       — allows all origins                                  │
 └──────────────────────────┬────────────────────────────────────────┘
                            │ Thread pool executor
                            ▼
@@ -310,7 +280,7 @@ audio_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
 │                                                                   │
 │  Input  — text + voice name + speed float                         │
 │  Output — numpy array of float32 PCM samples                      │
-│  Cache  — ~/.cache/huggingface/hub (named Docker volume locally)  │
+│  Cache  — ~/.cache/huggingface/hub                                │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
@@ -358,13 +328,10 @@ The `_ready` flag is critical. Without it, `/health` would return healthy as soo
 ```
 Vocably/
 ├── backend/
-│   ├── auth.py             # JWT: token creation, verification, credential validation
 │   ├── main.py             # FastAPI server — all endpoints, Kokoro pipeline, Upload & Clean
 │   ├── requirements.txt    # Python dependencies (pinned versions)
 │   ├── run.bat             # Backend startup script (Windows, local dev)
-│   ├── Dockerfile          # Container definition (production/cloud)
-│   ├── .dockerignore       # Excludes venv, .env, pycache from build context
-│   └── venv/               # Python virtual environment (local only, not in Docker)
+│   └── venv/               # Python virtual environment (local dev)
 ├── src/
 │   ├── components/
 │   │   ├── Hero/
@@ -388,10 +355,8 @@ Vocably/
 ├── Documents/
 │   └── documentation.md    # This file
 ├── mock_data/              # Sample files for testing Upload & Clean
-├── docker-compose.yml      # Backend service with HF model cache volume
 ├── start.bat               # Combined startup script (local dev)
 ├── .env.development        # VITE_TTS_BACKEND_URL=http://localhost:8000
-├── .env.production         # VITE_TTS_BACKEND_URL=<HF Spaces URL>
 ├── package.json
 └── vite.config.js
 ```
@@ -430,13 +395,6 @@ cd backend
 
 ```bash
 npm run dev
-```
-
-### Option 3: Docker backend + local frontend
-
-```bash
-docker-compose up --build   # backend in Docker on port 8000
-npm run dev                 # frontend as usual
 ```
 
 ### Access points
@@ -510,104 +468,219 @@ The file is sent to the backend, cleaned, and loaded into the textarea automatic
 
 ---
 
-## 8. Authentication — JWT from First Principles
+## 8. Streaming TTS — Architecture & Implementation
 
-### What authentication solves
+### The problem with batch generation
 
-Without authentication, anyone who knows the backend URL can send unlimited TTS requests — consuming CPU and potentially abusing the service. Authentication ensures only users with valid credentials can use the API.
+The original `/api/tts` endpoint collects all Kokoro audio segments into a single NumPy array, encodes the concatenated WAV as base64 JSON, and returns it in one response. For long text (9,000 chars ≈ 80 sentences), this means:
 
-### What a JWT is
+- Total generation time: ~10–12 minutes (RTF ~1.24 × ~8.5 min audio duration)
+- Time-to-first-audio: equal to total generation time — user waits the full duration before hearing a single word
+- `asyncio.wait_for` timeout of 600s is exceeded, returning HTTP 504
 
-A **JSON Web Token (JWT)** is a compact, self-contained string that encodes a user's identity and an expiry time. It has three parts separated by dots:
+### The solution: NDJSON streaming with per-sentence WAV chunks
 
+Kokoro's `KPipeline.__call__()` is a **generator** — it yields `(graphemes, phonemes, audio_np)` tuples one sentence at a time. Instead of collecting all yielded arrays, the streaming endpoint encodes each sentence's audio immediately and sends it to the client as it is produced.
+
+**Transport format: NDJSON (Newline-Delimited JSON)**
+
+Each line in the response body is a complete JSON object terminated by `\n`:
 ```
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9   ← Header (base64)
-.eyJzdWIiOiJ2b2NhYmx5IiwiZXhwIjoxN...  ← Payload (base64)
-.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV..  ← Signature (HMAC-SHA256)
-```
-
-- **Header:** declares the algorithm (`HS256`) and token type (`JWT`)
-- **Payload:** contains claims — `sub` (subject, i.e. the username) and `exp` (expiry timestamp)
-- **Signature:** `HMAC_SHA256(base64(header) + "." + base64(payload), SECRET_KEY)`
-
-The signature is what makes JWTs secure. Without knowing the `SECRET_KEY`, it is computationally infeasible to forge a valid token. The server verifies the signature on every request — no database lookup needed.
-
-### Why `sessionStorage`, not `localStorage`
-
-`localStorage` persists until explicitly cleared — if a user walks away from their machine with a tab open, the token stays there indefinitely. `sessionStorage` is scoped to the browser tab and is cleared automatically when the tab is closed. This is a deliberate security tradeoff: slightly less convenience in exchange for a smaller window for token theft.
-
-### The full auth flow
-
-```
-1. User submits login form (username: "vocably", password: "vocably2026")
-
-2. useAuth.js sends:
-   POST /login
-   { "username": "vocably", "password": "vocably2026" }
-
-3. auth.py: validate_credentials() compares against env vars (or defaults)
-   Returns True
-
-4. auth.py: create_access_token({"sub": "vocably"})
-   - Adds {"exp": now + 8 hours} to the payload
-   - jwt.encode(payload, SECRET_KEY, algorithm="HS256")
-   - Returns signed token string
-
-5. FastAPI returns: { "access_token": "eyJ...", "token_type": "bearer" }
-
-6. useAuth.js: sessionStorage.setItem("vocably_token", access_token)
-   App re-renders: isAuthenticated = true → shows Hero
-
-7. User clicks Play. useTTS.js reads the token:
-   POST /api/tts
-   Authorization: Bearer eyJ...
-   { "text": "...", "voice": "af_heart", "speed": 1.0 }
-
-8. FastAPI: Depends(verify_token) runs before the endpoint function
-   - HTTPBearer extracts the token from the Authorization header
-   - jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-   - Validates signature AND checks exp > now
-   - If valid: returns {"username": "vocably"} → endpoint runs
-   - If invalid or expired: raises HTTP 401 → endpoint never runs
+{"audio_base64": "UklGRiQ..."}\n
+{"audio_base64": "UklGRlA..."}\n
+{"audio_base64": "UklGRnA..."}\n
 ```
 
-### Key implementation details
+Each `audio_base64` value is a **complete, self-contained WAV file** (44-byte header + PCM_16 payload) for one sentence. This is critical: `AudioContext.decodeAudioData()` requires a complete, valid audio file — it cannot decode raw PCM or partial WAV streams. Since `soundfile.write()` produces a full WAV per call, the constraint is naturally satisfied.
 
-**Token creation (`auth.py`):**
+**Why NDJSON over raw PCM streaming:**
+- Raw PCM requires the client to know the sample rate and bit depth out-of-band, and WAV chunk boundaries do not align with TCP/HTTP read boundaries — robust boundary detection is non-trivial
+- NDJSON per complete WAV: zero boundary detection logic; each `reader.read()` chunk is accumulated into a line buffer and parsed when `\n` is encountered
+- 33% base64 size overhead is negligible against generation time savings (2s first audio vs 10+ min)
+
+### Backend implementation
+
+**The thread-to-asyncio bridge pattern:**
+
+`_pipeline()` is CPU-bound and synchronous — it must run in the `ThreadPoolExecutor`. The streaming endpoint needs to be an async generator so FastAPI can flush bytes to the client as they are produced. The bridge between the two is `asyncio.Queue` + `loop.call_soon_threadsafe`:
 
 ```python
-SECRET_KEY = os.environ.get("JWT_SECRET_KEY", secrets.token_hex(32))
-# If no env var is set, a secure random key is generated per server session.
-# This means tokens become invalid on server restart — intentional for security.
-# In production, always set JWT_SECRET_KEY as a persistent environment variable.
+_stream_stop_event: Optional[threading.Event] = None  # module-level
 
-def create_access_token(data: dict) -> str:
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(hours=8)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm="HS256")
+@app.post("/api/tts/stream")
+async def stream_speech(request_data: TTSRequest, http_request: Request):
+    global _stream_stop_event
+
+    # Signal any running stream to exit at the next sentence boundary
+    if _stream_stop_event is not None:
+        _stream_stop_event.set()
+    stop_event = threading.Event()
+    _stream_stop_event = stop_event
+
+    loop = asyncio.get_running_loop()
+    audio_queue: asyncio.Queue = asyncio.Queue()
+
+    def _stream_sync():
+        # Runs in ThreadPoolExecutor — cannot use await
+        try:
+            for _, _, audio in _pipeline(text, voice=voice, speed=speed,
+                                          split_pattern=r'\n+|(?<=[.!?])\s+'):
+                if stop_event.is_set():
+                    break  # new request cancelled this stream
+                buf = io.BytesIO()
+                sf.write(buf, audio, 24000, format="WAV", subtype="PCM_16")
+                b64 = base64.b64encode(buf.getvalue()).decode()
+                # Thread-safe: schedules put_nowait on the event loop thread
+                loop.call_soon_threadsafe(audio_queue.put_nowait, b64)
+        except Exception as e:
+            logger.error(f"TTS stream error: {e}")
+        finally:
+            # Sentinel: tells the async consumer that generation is complete
+            loop.call_soon_threadsafe(audio_queue.put_nowait, None)
+
+    _executor.submit(_stream_sync)
+
+    async def _response_gen():
+        while True:
+            try:
+                chunk = await asyncio.wait_for(audio_queue.get(), timeout=120.0)
+            except asyncio.TimeoutError:
+                break
+            if chunk is None:  # sentinel received
+                break
+            yield json.dumps({"audio_base64": chunk}) + "\n"
+            if await http_request.is_disconnected():
+                break  # client closed connection — stop sending
+
+    return StreamingResponse(_response_gen(), media_type="application/x-ndjson")
 ```
 
-**Token verification (FastAPI dependency):**
+**`loop.call_soon_threadsafe(audio_queue.put_nowait, value)`** is the correct pattern for putting items on an asyncio Queue from a non-async thread. `put_nowait` is non-blocking (raises `QueueFull` on bounded queues, but this queue is unbounded). `call_soon_threadsafe` schedules it on the event loop thread without blocking the worker thread.
 
-```python
-def verify_token(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
-) -> dict:
-    if credentials is None:
-        raise HTTPException(status_code=401, detail="Not authenticated.")
+**`_stream_stop_event` / `threading.Event` cancellation** — The `ThreadPoolExecutor` has `max_workers=1`, so only one `_stream_sync` runs at a time. If the user presses Stop and Play again (or changes speed mid-stream), a new `POST /api/tts/stream` request arrives while the old `_stream_sync` is still running. Without cancellation, the new task queues behind the old one and its `_response_gen()` times out after 120s waiting for chunks that will never arrive (the old `_stream_sync` is filling a different, now-unconsumed queue). The `threading.Event` fixes this: each new request calls `_stream_stop_event.set()`, which the running `_stream_sync` checks between sentence yields. It breaks out within ~1–2s (one sentence's generation time), freeing the executor thread for the new task.
 
-    try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=["HS256"])
-        username = payload.get("sub")
-        if username is None:
-            raise HTTPException(status_code=401, ...)
-        return {"username": username}
-    except JWTError:
-        raise HTTPException(status_code=401, ...)
+**`request.is_disconnected()`** is a FastAPI/Starlette ASGI method that checks whether the HTTP client has closed the connection. It is checked **after** each `yield` (not before `queue.get()`) — checking before `yield` triggers a Starlette bug where the buffered `http.disconnect` ASGI event from request body parsing causes it to return `True` immediately on the first loop iteration, terminating the stream before any audio is sent.
+
+**`split_pattern=r'\n+|(?<=[.!?])\s+'`** — The lookbehind `(?<=[.!?])` splits after sentence-ending punctuation without consuming the punctuation (it stays attached to the preceding sentence). This improves prosody at sentence boundaries compared to splitting on whitespace alone. Without this pattern, a 9,000-char transcript with no newlines would be processed as a single segment — a single enormous forward pass through the model.
+
+### Frontend implementation
+
+**Why Web Audio API instead of `<audio>` element:**
+
+The HTML `<audio>` element cannot schedule future playback with sample-accurate timing. Each chunk would need to wait until the previous chunk's `onended` event fires before starting — introducing gaps proportional to JavaScript event loop latency. `AudioContext` has an internal clock (`AudioContext.currentTime`, a float64 in seconds) that is independent of the JS event loop. `AudioBufferSourceNode.start(when)` schedules playback against this clock with sub-millisecond accuracy.
+
+**Gapless scheduling pattern:**
+
+```js
+// nextStartTimeRef tracks when the last scheduled chunk ends
+nextStartTimeRef.current = ctx.currentTime + 0.05; // initial offset
+
+// Per chunk:
+const source = ctx.createBufferSource();
+source.buffer = audioBuffer;
+source.connect(ctx.destination);
+
+const startAt = Math.max(nextStartTimeRef.current, ctx.currentTime + 0.01);
+source.start(startAt);
+nextStartTimeRef.current = startAt + audioBuffer.duration;
 ```
 
-**`Depends()` is FastAPI's dependency injection system.** When you write `Depends(verify_token)` in an endpoint's signature, FastAPI automatically calls `verify_token()` before the endpoint function runs. If `verify_token` raises an exception, the endpoint never executes. This keeps authentication logic out of every endpoint handler.
+`Math.max(nextStartTimeRef.current, ctx.currentTime + 0.01)` handles the case where decoding a chunk takes longer than the previous chunk's playback — rather than scheduling in the past (which would cause `InvalidStateError`), it clamps to `currentTime + 0.01` (10ms from now), creating a minimal and imperceptible gap.
+
+**Stream reading with line accumulation:**
+
+HTTP chunked transfer does not guarantee that `reader.read()` delivers data aligned to NDJSON line boundaries. A single `read()` call may return a partial line, multiple lines, or parts of multiple lines. The line buffer pattern handles this:
+
+```js
+const reader = response.body.getReader();
+const decoder = new TextDecoder();
+let lineBuffer = "";
+
+while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    lineBuffer += decoder.decode(value, { stream: true });
+    const lines = lineBuffer.split("\n");
+    lineBuffer = lines.pop(); // lines.pop() removes the last (potentially incomplete) element
+
+    for (const line of lines) {
+        if (!line.trim()) continue;
+        const { audio_base64 } = JSON.parse(line);
+        // ... decode and schedule
+    }
+}
+```
+
+`TextDecoder` with `{ stream: true }` maintains internal state across calls to handle multi-byte UTF-8 sequences that may be split across read boundaries.
+
+**`decodeAudioData` and ArrayBuffer ownership:**
+
+```js
+const bytes = Uint8Array.from(atob(audio_base64), c => c.charCodeAt(0));
+const audioBuffer = await ctx.decodeAudioData(bytes.buffer);
+```
+
+`decodeAudioData` **transfers ownership** of the ArrayBuffer — after the call, `bytes.buffer` is detached and cannot be read. This is intentional: the Web Audio API takes the buffer to avoid a copy. Do not attempt to read `bytes` after passing `.buffer` to `decodeAudioData`.
+
+**Session ID pattern for concurrent request safety:**
+
+```js
+const sessionId = ++sessionIdRef.current;
+
+// ... async operations ...
+
+// Guard state updates against stale sessions:
+if (sessionIdRef.current === sessionId) setIsSpeaking(false);
+```
+
+If the user clicks Stop and immediately clicks Play again, two async flows are active simultaneously. The session ID increments on each Play, so the `onended` callback from the first session's `lastSource` will find `sessionIdRef.current !== sessionId` and skip the `setIsSpeaking(false)` call — preventing the second session's speaking state from being incorrectly cleared.
+
+**Client-side WAV assembly for download:**
+
+After the stream ends, all collected `Float32Array` PCM channel data is concatenated and encoded into a WAV blob without a round-trip to the server:
+
+```js
+function buildWav(pcmFloat32, sampleRate = 24000) {
+    const n = pcmFloat32.length;
+    const buf = new ArrayBuffer(44 + n * 2);
+    const v = new DataView(buf);
+    const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    // RIFF chunk descriptor
+    w(0, "RIFF"); v.setUint32(4, 36 + n * 2, true);
+    w(8, "WAVE"); w(12, "fmt ");
+    // fmt sub-chunk (16 bytes, PCM format)
+    v.setUint32(16, 16, true);   // sub-chunk size
+    v.setUint16(20, 1, true);    // PCM = 1
+    v.setUint16(22, 1, true);    // channels = 1 (mono)
+    v.setUint32(24, sampleRate, true);
+    v.setUint32(28, sampleRate * 2, true); // byteRate = sampleRate × channels × bitDepth/8
+    v.setUint16(32, 2, true);    // blockAlign = channels × bitDepth/8
+    v.setUint16(34, 16, true);   // bitsPerSample
+    // data sub-chunk
+    w(36, "data"); v.setUint32(40, n * 2, true);
+    // Convert Float32 [-1.0, 1.0] to Int16 [-32768, 32767]
+    for (let i = 0; i < n; i++) {
+        const s = Math.max(-1, Math.min(1, pcmFloat32[i]));
+        v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+    return new Blob([buf], { type: "audio/wav" });
+}
+```
+
+`AudioBuffer.getChannelData(0)` returns a `Float32Array` view into the buffer's internal storage. The view remains valid as long as the `AudioBuffer` is not garbage-collected. Since scheduled `AudioBufferSourceNode` instances hold a reference to their buffer, and sources are held in `scheduledSourcesRef`, the buffers persist until `stopPlayback()` clears the array.
+
+### Before vs after
+
+| Metric | Before (batch) | After (streaming) |
+|---|---|---|
+| Time-to-first-audio (~9k chars) | ~10–12 min | ~1–2s |
+| Timeout risk | Yes — exceeded 600s | None — per-chunk 120s max |
+| Backend endpoint | `POST /api/tts` → base64 JSON | `POST /api/tts/stream` → NDJSON |
+| Audio playback API | `HTMLAudioElement` | `AudioContext` + `AudioBufferSourceNode` |
+| Gapless between chunks | N/A (single file) | Yes — `AudioContext` clock scheduling |
+| Download source | `URL.createObjectURL(blob)` | Client-assembled WAV from collected PCM |
+| Stop mechanism | `audio.pause()` | `AbortController.abort()` + `source.stop()` |
 
 ---
 
@@ -895,20 +968,20 @@ app.add_middleware(
 )
 ```
 
-The current configuration uses `allow_origins=["*"]` for simplicity. For a production deployment with sensitive data, you would restrict this to the specific frontend domain (e.g., `["https://vocably.onrender.com"]`).
+The current configuration uses `allow_origins=["*"]` — open for local development.
 
 ### 10.5 All endpoints
 
-| Method | Path              | Auth     | Description                                              |
-| ------ | ----------------- | -------- | -------------------------------------------------------- |
-| GET    | `/health`         | Public   | Returns `{"status": "healthy"}` when model is ready      |
-| POST   | `/login`          | Public   | Validates credentials, returns signed JWT                |
-| POST   | `/api/tts`        | Required | Generates speech from text, returns base64 WAV           |
-| GET    | `/api/voices`     | Public   | Returns list of available voices grouped by accent       |
-| POST   | `/api/clean`              | Required | Cleans text/SRT/VTT content via parser + Ollama          |
-| POST   | `/api/extract-pdf`        | Required | Extracts and cleans text from uploaded PDF               |
-| POST   | `/api/youtube-transcript` | Required | Fetches and cleans YouTube captions via URL              |
-| GET    | `/docs`                   | Public   | Auto-generated Swagger UI (interactive API documentation)|
+| Method | Path                      | Auth   | Description                                                      |
+| ------ | ------------------------- | ------ | ---------------------------------------------------------------- |
+| GET    | `/health`                 | None   | Returns `{"status": "healthy"}` when model is ready              |
+| POST   | `/api/tts`                | None   | Generates full audio from text, returns base64 WAV JSON          |
+| POST   | `/api/tts/stream`         | None   | Streams audio sentence-by-sentence as NDJSON (use this for play) |
+| GET    | `/api/voices`             | None   | Returns available voices grouped by accent                        |
+| POST   | `/api/clean`              | None   | Cleans text/SRT/VTT via regex + Ollama                           |
+| POST   | `/api/extract-pdf`        | None   | Extracts and cleans text from uploaded PDF                        |
+| POST   | `/api/youtube-transcript` | None   | Fetches and cleans YouTube captions by URL                        |
+| GET    | `/docs`                   | None   | Auto-generated Swagger UI                                         |
 
 ### 10.6 Base64 audio transport
 
@@ -941,7 +1014,7 @@ await audio.play();
 
 ### 11.1 The useTTS hook
 
-`useTTS.js` is a custom React hook — a function that encapsulates all TTS-related state and logic. Instead of putting dozens of `useState` calls and the `handlePlay` function directly in `Hero.jsx`, they live in a separate file and are imported via a single destructured call:
+`useTTS.js` is a custom React hook that encapsulates all TTS-related state and side effects. It uses the streaming `/api/tts/stream` endpoint and the Web Audio API for gapless playback. Consumer components receive a stable interface:
 
 ```js
 const {
@@ -954,7 +1027,7 @@ const {
 } = useTTS();
 ```
 
-**Why custom hooks:** Custom hooks follow the same rule as regular hooks — they must be called at the top level of a component or another hook, never conditionally. They allow complex stateful logic to be extracted from components, tested independently, and reused across multiple components.
+`handlePlay` is a toggle: if `isSpeaking || isLoading`, it calls `stopPlayback()` (aborts the fetch, stops all scheduled `AudioBufferSourceNode`s). Otherwise it initiates a new streaming session. `hasAudio` becomes `true` after all stream chunks are received and the download blob is assembled — it may become true while playback is still in progress.
 
 ### 11.2 Health polling
 
@@ -1014,7 +1087,7 @@ Vite reads `.env.development` when `npm run dev` is running and `.env.production
 VITE_TTS_BACKEND_URL=http://localhost:8000
 
 # .env.production
-VITE_TTS_BACKEND_URL=https://gilfoyle99213-vocably-backend.hf.space
+VITE_TTS_BACKEND_URL=http://localhost:8000
 ```
 
 ```js
@@ -1108,165 +1181,6 @@ Kokoro uses `misaki`, its own G2P library, which in turn uses `spacy` for tokeni
 
 ---
 
-## 13. Docker & Containerization
-
-### 13.1 Why containerization
-
-The Kokoro backend requires: Python 3.11, ~1.5 GB of Python packages, `espeak-ng` (a system binary for G2P), `gcc` (for compiling the `cryptography` package), and Tesseract OCR. Installing all of these consistently across different operating systems is fragile.
-
-Docker packages the application and all its dependencies into a single image. The image runs identically on your laptop, a CI server, or a cloud platform — without any manual environment setup on the target machine.
-
-### 13.2 Dockerfile explained
-
-```dockerfile
-FROM python:3.11-slim
-# Base image: minimal Debian Linux with Python 3.11.
-# "slim" = no build tools, compilers, or development headers.
-# ~50 MB vs ~900 MB for the full Python image.
-
-RUN apt-get update && apt-get install -y --no-install-recommends gcc espeak-ng
-# gcc: required to compile the "cryptography" Python package (which python-jose depends on).
-# espeak-ng: system G2P binary required by Kokoro's misaki phonemizer on Linux.
-# --no-install-recommends: skips optional packages to keep the image small.
-
-RUN useradd -m -u 1000 user
-USER user
-ENV PATH=/home/user/.local/bin:$PATH
-# Non-root user (UID 1000): required by Hugging Face Spaces.
-# Principle of least privilege: if the container is compromised, the attacker
-# has user-level access, not root access.
-
-COPY --chown=user requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-# requirements.txt is copied BEFORE the application code.
-# Docker caches each RUN layer separately. If only main.py changes,
-# Docker reuses the pip install layer on the next build — saves 3-5 minutes.
-
-COPY --chown=user main.py auth.py ./
-# Application code is copied last because it changes most frequently.
-
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-7860}
-# Shell form CMD (not JSON array) is required for ${PORT:-7860} to expand.
-# JSON array form ["uvicorn", ..., "${PORT:-7860}"] does NOT expand env vars.
-# --host 0.0.0.0: binds to all network interfaces inside the container.
-# 127.0.0.1 would only accept connections from within the container itself —
-# the host machine would be unable to reach it.
-```
-
-### 13.3 Layer caching
-
-Docker builds images in layers. Each instruction in the Dockerfile is one layer. If an instruction's inputs have not changed since the last build, Docker reuses the cached layer.
-
-```
-Layer 1: FROM python:3.11-slim             ← rarely changes
-Layer 2: RUN apt-get install gcc espeak-ng ← rarely changes
-Layer 3: COPY requirements.txt .           ← changes when deps change
-Layer 4: RUN pip install -r requirements   ← cached if layer 3 unchanged
-Layer 5: COPY main.py auth.py              ← changes on every deploy
-```
-
-If you change only `main.py`, layers 1–4 are reused from cache and only layer 5 is rebuilt. This is why `requirements.txt` must be copied and installed **before** the application code — if it were done in one step (`COPY . . && pip install`), any code change would invalidate the cache and re-run `pip install`.
-
-### 13.4 docker-compose.yml
-
-```yaml
-services:
-  backend:
-    build: ./backend
-    ports:
-      - "8000:8000"
-    volumes:
-      - huggingface_cache:/home/user/.cache/huggingface/hub
-    environment:
-      - PORT=8000
-
-volumes:
-  huggingface_cache:
-```
-
-The `huggingface_cache` named volume mounts the directory where Kokoro downloads model weights. Without it, the 500 MB model would be re-downloaded every time the container restarts. With it, the model is downloaded once and reused.
-
----
-
-## 14. Cloud Deployment — Render + Hugging Face Spaces
-
-### 14.1 Why two separate platforms
-
-The frontend and backend have fundamentally different hosting requirements:
-
-| Concern    | Frontend (React)                           | Backend (FastAPI + Kokoro)                      |
-| ---------- | ------------------------------------------ | ----------------------------------------------- |
-| Output     | Static files (HTML, JS, CSS) — ~200 KB     | A running Python process that allocates ~2 GB RAM |
-| Hosting    | Any CDN can serve static files for free    | Requires a machine with enough RAM and CPU       |
-| Cost       | Render free tier: unlimited static hosting | Hugging Face Spaces: free CPU tier, 16 GB RAM    |
-
-Render's free web service tier (the one that would run a Node.js or Python process) sleeps after 15 minutes. Static sites on Render are always-on because they're served by a CDN with no process to sleep.
-
-### 14.2 Hugging Face Spaces (Backend)
-
-HF Spaces free CPU tier provides 2 vCPUs and 16 GB RAM — more than enough for Kokoro (~2 GB RAM). HF Hub also provides native model caching, so `KPipeline` downloads the model on first startup and caches it automatically.
-
-**What HF Spaces expects from a Docker container:**
-
-1. Listens on port 7860 (injected as `PORT=7860` environment variable)
-2. Runs as UID 1000 (non-root)
-3. Does not assume persistent storage (model is re-downloaded on container restart on the free tier)
-
-**Deploying:**
-
-```bash
-# 1. Create Space: huggingface.co/new-space → Docker → CPU Basic → Public
-
-# 2. Clone the HF Space repo
-git clone https://huggingface.co/spaces/YourUsername/vocably-backend
-
-# 3. Copy backend files
-cp backend/Dockerfile backend/main.py backend/auth.py backend/requirements.txt vocably-backend/
-
-# 4. Push — HF builds and deploys automatically
-cd vocably-backend
-git add .
-git commit -m "Deploy"
-git push  # authenticate with HF access token (not password)
-
-# 5. Set secrets in Space Settings:
-#    JWT_SECRET_KEY = <random 32+ character string>
-#    FRONTEND_URL   = https://vocably.onrender.com
-#    VOCABLY_USERNAME = vocably
-#    VOCABLY_PASSWORD = vocably2026
-```
-
-**Verify:**
-
-```bash
-curl https://your-username-vocably-backend.hf.space/health
-# {"status":"healthy"}
-```
-
-### 14.3 Render (Frontend)
-
-Render builds the Vite project with `npm install && npm run build` and serves the `dist/` folder from a CDN. The build step runs `npm run build`, which reads `.env.production` and bakes the HF Spaces backend URL into the JavaScript bundle.
-
-**Deploying:**
-
-1. Push the Vocably repo to GitHub
-2. render.com → New → Static Site → Connect GitHub → select repo
-3. Build command: `npm install && npm run build`
-4. Publish directory: `dist`
-5. Add environment variable: `VITE_TTS_BACKEND_URL = https://your-username-vocably-backend.hf.space`
-6. Deploy
-
-### 14.4 Environment variables summary
-
-| Variable               | Set in            | Purpose                                          |
-| ---------------------- | ----------------- | ------------------------------------------------ |
-| `VITE_TTS_BACKEND_URL` | Render dashboard  | Frontend → backend URL (baked in at build time)  |
-| `JWT_SECRET_KEY`       | HF Spaces secrets | Signs/verifies JWT tokens                        |
-| `FRONTEND_URL`         | HF Spaces secrets | CORS allowed origin (if restricting access)      |
-| `VOCABLY_USERNAME`     | HF Spaces secrets | Login username override                          |
-| `VOCABLY_PASSWORD`     | HF Spaces secrets | Login password override                          |
-| `PORT`                 | HF Spaces (auto)  | Uvicorn port — HF injects 7860                   |
-
 ---
 
 ## 15. HTTP Status Codes Reference
@@ -1294,27 +1208,14 @@ The backend is still warming up. This is expected during first startup (model lo
 
 If the banner shows "Backend is offline" instead of "warming up", the backend server is not running at all. Start it with `.\start.bat` or `cd backend && .\run.bat`.
 
-### Login page does not appear
-
-- Make sure the frontend is running: `npm run dev`
-- Open http://localhost:5173, not http://localhost:8000
-- Check the terminal for errors from Vite
-
 ### "Cannot connect to TTS server"
 
 - Confirm the backend is running: visit http://localhost:8000/health in a browser
 - If the health check works but the frontend cannot connect, check that `.env.development` contains `VITE_TTS_BACKEND_URL=http://localhost:8000`
 
-### "Session expired. Please log in again."
-
-- Your JWT expired (8-hour window) or the server restarted (which generates a new `SECRET_KEY` and invalidates all existing tokens)
-- Log out and log back in
-
 ### TTS generation times out (504)
 
-- Text is very long — try splitting into shorter segments (under 500 characters for testing)
-- First cold start after a long idle period may take longer on HF Spaces
-- Check the backend logs for more detail
+This should not occur with the streaming endpoint. If using `/api/tts` directly (e.g. via the API docs at `/docs`), 9,000+ character inputs can exceed 600s on CPU. Use `/api/tts/stream` instead, or reduce input length. Check backend logs for the specific exception.
 
 ### Upload & Clean does not remove fillers
 
@@ -1343,20 +1244,17 @@ Normal. Kokoro uses all available CPU cores during the single forward pass. Usag
 | ~30 chars   | ~1.7s           | ~0.2 |
 | ~200 chars  | ~11s            | ~1.2 |
 | ~500 chars  | ~25s            | ~1.2 |
+| ~9,000 chars | ~10–12 min (batch) / ~8–10 min total, **first audio in ~2s** (stream) | ~1.24 |
 
 **RTF (Real-Time Factor):** ratio of generation time to audio duration. RTF 1.2 means generating 10 seconds of audio takes 12 seconds. RTF < 1.0 would mean generation is faster than real-time.
 
-### On Hugging Face Spaces free tier (2 shared vCPUs)
-
-Generation is typically 1.5–2× slower than on a dedicated i5: ~15–30 seconds for a 200-character sentence.
-
 ### Tips for faster generation
 
-1. Keep text under 500 characters per generation
-2. Close other CPU-intensive applications while generating
-3. Plug in your laptop — power-saving mode throttles CPU cores
-4. Use shorter speed presets (1.25× and 1.5×) — faster playback generation
-5. Keep the backend running — model load is 5 seconds; restarting wastes it
+1. Use the streaming endpoint (`/api/tts/stream`) for any text over ~500 characters — first audio arrives in ~2s regardless of total length
+2. The `split_pattern=r'\n+|(?<=[.!?])\s+'` in `_generate_sync` and `_stream_sync` splits text at sentence boundaries — processing one sentence per forward pass is significantly faster than a single large forward pass
+3. Close other CPU-intensive applications during generation
+4. Plug in your laptop — power-saving mode throttles CPU performance states
+5. Keep the backend running — model load takes ~5s; the voice cache pre-warm adds another ~10s on first start
 
 ---
 
@@ -1371,14 +1269,6 @@ Generation is typically 1.5–2× slower than on a dedicated i5: ~15–30 second
 | Start frontend only      | `npm run dev`                          | Project root     |
 | Build frontend           | `npm run build`                        | Project root     |
 | Install frontend deps    | `npm install`                          | Project root     |
-
-### Docker
-
-| What                        | Command                             | Directory    |
-| --------------------------- | ----------------------------------- | ------------ |
-| Start backend in Docker     | `docker-compose up --build`         | Project root |
-| Stop Docker                 | `docker-compose down`               | Project root |
-| Build image only            | `docker build -t vocably-backend .` | `backend/`   |
 
 ### Python virtualenv
 
@@ -1437,18 +1327,6 @@ If the Play button were enabled immediately, the first TTS request would either 
 
 ---
 
-**Q: Can I delete the `welcome-to-docker` container in Docker Desktop?**
-
-Yes. It is Docker's built-in tutorial container, created when you first installed Docker Desktop. It has no relation to Vocably. Delete it from Docker Desktop → Containers, and delete the `docker/welcome-to-docker` image from Docker Desktop → Images.
-
----
-
-**Q: Why does adding environment variables to HF Spaces restart the server?**
-
-HF Spaces injects environment variables into the container at startup. The only way to make a new variable available to the running process is to restart the container so it starts fresh with the new environment. This takes ~2–3 minutes including model warmup. It is expected behaviour.
-
----
-
 **Q: The frontend is at a different domain than the backend. Why doesn't the browser block requests?**
 
 The browser enforces CORS — by default it blocks cross-origin requests. FastAPI's `CORSMiddleware` tells the browser explicitly that cross-origin requests are allowed. The browser only blocks the request if the server does not respond with the correct `Access-Control-Allow-Origin` header. CORS is purely a browser enforcement; server-to-server requests (like from `curl` or Postman) are never subject to it.
@@ -1464,12 +1342,6 @@ Pre-warming every voice would extend startup by several minutes (15 voices × ~3
 **Q: What happens if two users click Play at the same time?**
 
 The second request is queued. `ThreadPoolExecutor(max_workers=1)` ensures only one Kokoro generation runs at a time. The second request waits in line until the first generation finishes, then starts. The 300-second `asyncio.wait_for` timeout applies per request, so if the queue grows large, earlier requests might time out.
-
----
-
-**Q: Why does TTS generation take longer on HF Spaces than locally?**
-
-HF Spaces free tier provides 2 shared vCPUs. "Shared" means the physical CPU cores are time-multiplexed with other tenants' workloads. On a dedicated Intel i5-1340P (4P + 8E cores), Kokoro has full, uncontested access to all cores. On HF Spaces, it gets a fraction of two cores. This results in roughly 2× longer generation time.
 
 ---
 
@@ -1593,28 +1465,9 @@ All YouTube video IDs are exactly 11 characters from the alphabet `[a-zA-Z0-9_-]
 
 ---
 
-### 20.8 `backend/auth.py` — Design Decisions
+### 20.8 Authentication — Removed
 
-**`SECRET_KEY` generation:**
-
-```python
-SECRET_KEY: str = os.environ.get("JWT_SECRET_KEY", secrets.token_hex(32))
-```
-
-If `JWT_SECRET_KEY` is not set as an environment variable, a new 32-byte random key is generated at server startup. This means **all existing tokens are invalidated on every server restart** — intentional for security. In production (especially on Hugging Face Spaces), always set `JWT_SECRET_KEY` as a persistent environment variable so tokens survive container restarts.
-
-**`ACCESS_TOKEN_EXPIRE_HOURS = 8`** — sized to cover one working day. A user who logs in at the start of their session stays authenticated without being interrupted.
-
-**Credential override:**
-
-```python
-DEMO_USERNAME = os.environ.get("VOCABLY_USERNAME", "vocably")
-DEMO_PASSWORD = os.environ.get("VOCABLY_PASSWORD", "vocably2026")
-```
-
-The defaults (`vocably` / `vocably2026`) are intentionally visible in the source code for local development. In production, override both via environment variables. The JWT flow itself is production-grade regardless of the credential storage method.
-
-**`validate_credentials` design note:** In a production system this would hash the input password with bcrypt and compare against a stored hash — never storing or comparing plaintext passwords. For this local demo, a direct string comparison is used. The JWT authentication layer on top provides the actual security boundary.
+JWT authentication was present in earlier versions (commit `3070681` removed it). The application now has no authentication layer. All endpoints accept requests without credentials. CORS is open (`allow_origins=["*"]`) for local development.
 
 ---
 
@@ -1626,28 +1479,9 @@ The defaults (`vocably` / `vocably2026`) are intentionally visible in the source
 
 ---
 
-### 20.10 `src/hooks/useAuth.js` — Token Lifecycle
+### 20.10 `src/hooks/useAuth.js` — Removed
 
-**`sessionStorage` over `localStorage`:** Tokens stored in `localStorage` survive browser restarts and persist until explicitly deleted — if a user walks away from their machine with a tab open, the token remains accessible indefinitely. `sessionStorage` clears automatically when the browser tab is closed, limiting the token's effective lifetime to the active session.
-
-**30-second login timeout:**
-
-```js
-const controller = new AbortController();
-const timeoutId = setTimeout(() => controller.abort(), 30000);
-```
-
-Hugging Face Spaces free tier has a "cold start" — the container is put to sleep after idle periods and can take 30–60 seconds to wake up. Without a timeout, a login attempt against a cold-starting backend would hang silently until the browser's default timeout (typically 2+ minutes). The 30-second `AbortError` fires a clear "Server not responding" message instead.
-
-**Error classification in `login()`:**
-
-| Error condition                        | Message shown in UI                                                        |
-| -------------------------------------- | -------------------------------------------------------------------------- |
-| `AbortError` (30s timeout)             | "Server not responding. Make sure the backend is running and try again."   |
-| `Failed to fetch` / `NetworkError`     | "Cannot connect to server. Check your connection and try again."           |
-| All other errors (e.g. 401 from server) | The server's `detail` message, or "Login failed. Please try again."      |
-
-**`getToken()`** reads the stored JWT from `sessionStorage` and returns it for use in `Authorization: Bearer` headers in API calls. Returns `null` if the user is not authenticated.
+`useAuth.js` was removed along with the JWT authentication system (commit `3070681`). The app renders directly to the `Hero` component on load. There is no login page, no token, and no `Authorization` header on API requests.
 
 ---
 
@@ -1657,12 +1491,26 @@ Hugging Face Spaces free tier has a "cold start" — the container is put to sle
 
 | Value       | Meaning                                                       | UI shown                          |
 | ----------- | ------------------------------------------------------------- | --------------------------------- |
-| `"checking"` | First poll not yet complete — status unknown                  | Play button greyed out            |
-| `"warming"`  | Backend responding but `_ready` is `false`                   | Amber "warming up" banner         |
-| `"ready"`    | `/health` returned `{"status": "healthy"}`                    | Play button enabled               |
-| `"offline"`  | Network error or non-2xx response from `/health`              | Red "offline" banner              |
+| `"checking"` | First health poll not yet complete                           | Play button greyed out            |
+| `"warming"`  | Backend responding but `_ready` flag is `false`              | Amber "warming up" banner         |
+| `"ready"`    | `/health` returned `{"status": "healthy"}`                   | Play button enabled               |
+| `"offline"`  | Network error or non-2xx from `/health`                      | Red "offline" banner              |
 
-Once `"ready"` is reached, the health polling interval is cleared — no further polls are made. The transition to `"offline"` can happen at any time if the backend becomes unreachable (the interval only clears on `"ready"`, not on error).
+Once `"ready"` is reached, the polling interval is cleared — no further polls are made.
+
+The hook uses three refs that survive re-renders without triggering them:
+
+| Ref | Type | Purpose |
+|---|---|---|
+| `audioCtxRef` | `AudioContext \| null` | Reused across play sessions; created on first user gesture |
+| `scheduledSourcesRef` | `AudioBufferSourceNode[]` | Held so `stopPlayback()` can call `.stop()` on each |
+| `nextStartTimeRef` | `number` | AudioContext clock timestamp: when the last scheduled chunk ends |
+| `abortRef` | `AbortController \| null` | Cancelled on stop to close the fetch stream |
+| `collectedPCMRef` | `Float32Array[]` | Channel data from each decoded chunk, for download assembly |
+| `downloadBlobRef` | `Blob \| null` | Assembled WAV blob; available as soon as stream ends |
+| `sessionIdRef` | `number` | Monotonically incrementing; guards async callbacks against stale sessions |
+
+`AudioContext` must be created inside a user gesture handler (the Play button click) — browsers block `AudioContext` construction or suspend it if triggered outside user interaction. The `ctx.state === "suspended"` check with `ctx.resume()` handles browsers (primarily Safari) that suspend the context even when created inside a click handler.
 
 ---
 
@@ -1718,5 +1566,62 @@ The desktop navbar uses an absolute-center approach for the navigation links:
 ```
 
 This positions the links at the exact geometric center of the navbar regardless of the widths of the Logo (left) and Logout button (right). A `flex justify-center` approach would be off-center if the left and right elements have different widths. The `NAV_LINKS` array drives both the desktop flyout navigation and the mobile accordion — the same data source renders both layouts.
+
+---
+
+## 21. Streaming TTS — Web Audio API Reference
+
+### AudioContext lifecycle
+
+`AudioContext` is created once per `useTTS` hook instance and reused across play sessions. `AudioContext.close()` is called in the `useEffect` cleanup (component unmount). Creating a new `AudioContext` per play session was considered but rejected — browsers enforce a limit on the number of concurrent `AudioContext` instances per page (typically 6 in Chrome). Reusing one context avoids this limit and eliminates the ~10ms context initialization overhead per play.
+
+`AudioContext.currentTime` is a read-only float64 that increases monotonically at the audio sample rate from the moment the context is created. It is the reference clock for all scheduling. `AudioContext.currentTime` cannot be set or paused.
+
+### AudioBufferSourceNode constraints
+
+`AudioBufferSourceNode` is a **one-shot node** — it can only be started once. Calling `.start()` a second time throws `InvalidStateError`. This is why a new source node is created per chunk rather than reusing one. Calling `.stop()` on a source that has already ended also throws — hence the `try/catch` in `stopPlayback()`.
+
+```js
+scheduledSourcesRef.current.forEach(s => { try { s.stop(); } catch {} });
+```
+
+### decodeAudioData transfer semantics
+
+`AudioContext.decodeAudioData(arrayBuffer)` transfers ownership of the `ArrayBuffer` to the audio subsystem. The buffer becomes detached after the call — `byteLength` becomes 0 and any typed array view into it throws `TypeError`. The decoded `AudioBuffer` is a separate object allocated by the audio subsystem.
+
+The PCM channel data is collected **before** the source node is created and started:
+
+```js
+const audioBuffer = await ctx.decodeAudioData(bytes.buffer);
+collectedPCMRef.current.push(audioBuffer.getChannelData(0)); // collect Float32Array view
+const source = ctx.createBufferSource();
+source.buffer = audioBuffer;
+```
+
+`getChannelData(0)` returns a live `Float32Array` view into the `AudioBuffer`'s internal PCM storage. The view remains valid as long as the `AudioBuffer` is alive. The `AudioBuffer` is alive as long as `source.buffer` references it — and `source` is held in `scheduledSourcesRef`. This chain prevents premature GC.
+
+### NDJSON streaming — browser Fetch API
+
+`response.body` is a `ReadableStream<Uint8Array>`. Each call to `reader.read()` resolves with a `{ done: boolean, value: Uint8Array }`. The `value` is a raw network buffer — its size is determined by TCP segment boundaries, not by application-level message boundaries.
+
+`TextDecoder` with `{ stream: true }` maintains state between `decode()` calls. Without this flag, multi-byte UTF-8 sequences split across two `Uint8Array` chunks would produce replacement characters (`U+FFFD`). With `{ stream: true }`, the decoder buffers incomplete sequences internally.
+
+The line accumulator pattern:
+```js
+lineBuffer += decoder.decode(value, { stream: true });
+const lines = lineBuffer.split("\n");
+lineBuffer = lines.pop(); // last element may be incomplete
+```
+`split("\n")` on `"a\nb\nc"` returns `["a", "b", "c"]`. `pop()` removes `"c"` (potentially incomplete). `split("\n")` on `"a\nb\n"` returns `["a", "b", ""]`. `pop()` removes `""` — an empty string. Both cases are handled correctly: `if (!line.trim()) continue` skips the empty string.
+
+### CORS and streaming
+
+`StreamingResponse` flushes bytes as the async generator yields them. For CORS preflight (`OPTIONS` request), the `CORSMiddleware` handles it before the streaming response is initiated. The `Content-Type: application/x-ndjson` header is set on the `StreamingResponse` — browsers do not restrict reading NDJSON streams via `fetch` as long as CORS headers are present on the response.
+
+### request.is_disconnected() internals
+
+`Request.is_disconnected()` is an ASGI method that sends a `http.disconnect` receive message check to the underlying transport. In Uvicorn, this polls the underlying asyncio transport to check if the client TCP connection is still open. It is a coroutine — it must be awaited.
+
+**Known Starlette bug**: `is_disconnected()` uses `anyio.move_on_after(0)` internally — a zero-timeout receive that returns whatever ASGI event is already buffered. After parsing the request body, Uvicorn buffers a `http.disconnect` event. If `is_disconnected()` is called at the top of the loop (before `queue.get()`), it picks up this stale event and returns `True` immediately — on the very first iteration, before any audio is sent. The fix: poll `is_disconnected()` **after** `yield`, not before `queue.get()`. At that point the buffered disconnect event has already been consumed and the check accurately reflects whether the client is still connected.
 
 ---

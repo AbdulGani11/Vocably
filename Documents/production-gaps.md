@@ -29,7 +29,7 @@ Required for: Upload & Clean, YouTube transcript cleaning.
 Download from [ollama.com](https://ollama.com) and pull the model:
 
 ```bash
-ollama pull qwen3.5:4b
+ollama pull qwen2.5:3b
 ```
 
 Ollama must be **running** before starting the backend. It runs as a background service after installation — on Windows it starts automatically. On Linux/Mac, run `ollama serve` in a terminal first.
@@ -97,9 +97,3 @@ Open `http://localhost:5173` — the app loads directly, no login required.
 ### Scanned PDF OCR — Windows path hardcoded
 
 The Tesseract path in `backend/main.py` is set to the Windows default install location. Linux and Mac users must remove that line for OCR to work. Digital PDFs (created by software, not scanned) work on all platforms without Tesseract.
-
-## Deployment Note (HF Spaces)
-
-The deployed version on Hugging Face Spaces runs the TTS-only backend. Ollama is not installed in the Docker container, so Upload & Clean and YouTube transcript cleaning do not work in the cloud-deployed version. These are local-only features by design.
-
-To use the full feature set, run the backend locally.

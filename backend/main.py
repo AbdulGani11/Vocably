@@ -2,8 +2,10 @@ import io
 import os
 import re
 import sys
+import json
 import asyncio
 import logging
+import threading
 import concurrent.futures
 from typing import Optional
 from contextlib import asynccontextmanager
@@ -13,8 +15,9 @@ import httpx
 import base64
 import numpy as np
 import soundfile as sf
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 logging.basicConfig(level=logging.INFO)
@@ -23,6 +26,7 @@ logger = logging.getLogger(__name__)
 _pipeline = None
 _executor: Optional[concurrent.futures.ThreadPoolExecutor] = None
 _ready = False
+_stream_stop_event: Optional[threading.Event] = None
 
 class TTSRequest(BaseModel):
     text: str
@@ -111,7 +115,7 @@ def _parse_srt(text: str) -> str:
     return " ".join(p for p in parts if p)
 
 _OLLAMA_URL = "http://localhost:11434"
-_OLLAMA_MODEL = "qwen3.5:4b"
+_OLLAMA_MODEL = "qwen2.5:3b"
 
 _CLEAN_SYSTEM_PROMPT = (
     "You are a text formatter for text-to-speech conversion. "
@@ -149,7 +153,7 @@ def _extract_video_id(url: str) -> Optional[str]:
 
 def _generate_sync(text: str, voice: str, speed: float) -> tuple[str, int]:
     chunks = []
-    for _, _, audio in _pipeline(text, voice=voice, speed=speed, split_pattern=r'\n+'):
+    for _, _, audio in _pipeline(text, voice=voice, speed=speed, split_pattern=r'\n+|(?<=[.!?])\s+'):
         chunks.append(audio)
 
     if not chunks:
@@ -222,7 +226,7 @@ async def generate_speech(request: TTSRequest):
     try:
         audio_b64, sample_rate = await asyncio.wait_for(
             loop.run_in_executor(_executor, _generate_sync, text, voice, speed),
-            timeout=300.0,
+            timeout=600.0,
         )
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="TTS generation timed out")
@@ -231,6 +235,68 @@ async def generate_speech(request: TTSRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
     return TTSResponse(audio_base64=audio_b64, sample_rate=sample_rate)
+
+
+@app.post("/api/tts/stream")
+async def stream_speech(request_data: TTSRequest, http_request: Request):
+    global _stream_stop_event
+
+    if _pipeline is None:
+        raise HTTPException(status_code=503, detail="TTS pipeline not ready")
+
+    text = request_data.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Text is required")
+    if len(text) > 10000:
+        raise HTTPException(status_code=400, detail="Text too long (max 10000 chars)")
+
+    voice = request_data.voice or "af_heart"
+    speed = max(0.5, min(2.0, request_data.speed or 1.0))
+
+    logger.info(f"TTS stream: voice={voice} speed={speed} chars={len(text)}")
+
+    # Cancel any in-progress stream so the executor thread is freed quickly
+    if _stream_stop_event is not None:
+        _stream_stop_event.set()
+
+    stop_event = threading.Event()
+    _stream_stop_event = stop_event
+
+    loop = asyncio.get_running_loop()
+    audio_queue: asyncio.Queue = asyncio.Queue()
+
+    def _stream_sync():
+        try:
+            for _, _, audio in _pipeline(text, voice=voice, speed=speed, split_pattern=r'\n+|(?<=[.!?])\s+'):
+                if stop_event.is_set():
+                    logger.info("TTS stream: cancelled — new request queued")
+                    break
+                buf = io.BytesIO()
+                sf.write(buf, audio, 24000, format="WAV", subtype="PCM_16")
+                b64 = base64.b64encode(buf.getvalue()).decode()
+                loop.call_soon_threadsafe(audio_queue.put_nowait, b64)
+        except Exception as e:
+            logger.error(f"TTS stream error: {e}")
+        finally:
+            loop.call_soon_threadsafe(audio_queue.put_nowait, None)
+
+    _executor.submit(_stream_sync)
+
+    async def _response_gen():
+        while True:
+            try:
+                chunk = await asyncio.wait_for(audio_queue.get(), timeout=120.0)
+            except asyncio.TimeoutError:
+                logger.warning("TTS stream: timeout waiting for chunk")
+                break
+            if chunk is None:
+                break
+            yield json.dumps({"audio_base64": chunk}) + "\n"
+            if await http_request.is_disconnected():
+                logger.info("TTS stream: client disconnected")
+                break
+
+    return StreamingResponse(_response_gen(), media_type="application/x-ndjson")
 
 
 @app.get("/api/voices")
@@ -268,7 +334,6 @@ async def _ollama_clean(text: str, prompt: str = _CLEAN_SYSTEM_PROMPT) -> tuple[
                         {"role": "user", "content": text},
                     ],
                     "stream": False,
-                    "think": False,
                 },
             )
             response.raise_for_status()
@@ -281,8 +346,37 @@ async def _ollama_clean(text: str, prompt: str = _CLEAN_SYSTEM_PROMPT) -> tuple[
                 )
                 return _regex_clean(text), True
             return cleaned, True
-    except (httpx.ConnectError, httpx.TimeoutException):
+    except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError):
         return _regex_clean(text), False
+
+
+async def _ollama_clean_long(text: str, prompt: str = _CLEAN_SYSTEM_PROMPT, chunk_size: int = 3000) -> tuple[str, bool]:
+    """Process long text by splitting into sentence-boundary chunks to avoid timeouts."""
+    if len(text) <= chunk_size:
+        return await _ollama_clean(text, prompt)
+
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+    for sent in sentences:
+        if current_len + len(sent) > chunk_size and current:
+            chunks.append(" ".join(current))
+            current = [sent]
+            current_len = len(sent)
+        else:
+            current.append(sent)
+            current_len += len(sent) + 1
+    if current:
+        chunks.append(" ".join(current))
+
+    parts: list[str] = []
+    for chunk in chunks:
+        cleaned, available = await _ollama_clean(chunk, prompt)
+        if not available:
+            return _regex_clean(text), False
+        parts.append(cleaned)
+    return " ".join(parts), True
 
 
 def _extract_pdf(pdf_bytes: bytes) -> tuple[str, int, str]:
@@ -374,7 +468,7 @@ async def extract_pdf(file: UploadFile = File(...)):
     if not raw_text.strip():
         raise HTTPException(status_code=422, detail="Could not extract any text from this PDF")
 
-    cleaned, available = await _ollama_clean(raw_text[:10000])
+    cleaned, available = await _ollama_clean_long(raw_text[:10000])
     logger.info(f"PDF extracted: {page_count}p via {method}, {len(raw_text)} → {len(cleaned)} chars")
     return PDFResponse(cleaned_text=cleaned, pages=page_count, method=method, available=available)
 
@@ -436,7 +530,7 @@ async def youtube_transcript(request: YouTubeRequest):
 
     logger.info(f"YouTube: {video_id} — {len(raw_text)} chars raw")
 
-    cleaned, available = await _ollama_clean(raw_text[:10000], prompt=_CLEAN_SYSTEM_PROMPT)
+    cleaned, available = await _ollama_clean_long(raw_text[:10000], prompt=_CLEAN_SYSTEM_PROMPT)
 
     logger.info(f"YouTube: cleaned {len(raw_text)} → {len(cleaned)} chars")
 

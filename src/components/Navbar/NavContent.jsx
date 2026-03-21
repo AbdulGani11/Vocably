@@ -23,7 +23,7 @@ export const FeaturesContent = () => (
         Transform text into lifelike voice
       </h3>
       <p className="text-xs text-neutral-500 mt-2 leading-relaxed">
-        Kokoro-82M · 15 voices · JWT-secured · cloud deployed
+        Kokoro-82M · 15 voices · AI cleanup · runs locally
       </p>
     </div>
 
@@ -38,30 +38,24 @@ export const FeaturesContent = () => (
         icon="ri-speed-up-line"
         label="Speed Control"
         description="Four presets from 0.75× (slow) to 1.5× (fast) for any use case"
-        href="https://vocably.onrender.com"
+        href="https://github.com/AbdulGani11/Vocably"
       />
       <NavItem
-        icon="ri-shield-line"
-        label="JWT Secured API"
-        description="HS256 Bearer tokens with 8-hour expiry, stored in sessionStorage"
-        href="https://jwt.io"
-      />
-      <NavItem
-        icon="ri-cloud-line"
-        label="Cloud Deployment"
-        description="Frontend on Render, TTS backend on Hugging Face Spaces"
-        href="https://gilfoyle99213-vocably-backend.hf.space"
+        icon="ri-magic-line"
+        label="AI Text Cleanup"
+        description="Upload transcripts, PDFs, or paste YouTube URLs — cleaned with Ollama"
+        href="https://ollama.com"
       />
       <NavItem
         icon="ri-book-open-line"
         label="Content Creators"
         description="Audiobooks, podcasts, YouTube narration, and presentations"
-        href="https://vocably.onrender.com"
+        href="https://github.com/AbdulGani11/Vocably"
       />
       <NavItem
         icon="ri-code-s-slash-line"
         label="Developers"
-        description="REST API, Docker image, JWT auth — fork-ready on GitHub"
+        description="REST API, open-source — fork-ready on GitHub"
         href="https://github.com/AbdulGani11/Vocably"
       />
     </div>
@@ -78,7 +72,7 @@ export const DocsContent = () => (
         Everything you need to build with Vocably
       </h3>
       <p className="text-xs text-neutral-500 mt-2 leading-relaxed">
-        API reference, model details, deployment guides.
+        API reference, model details, setup guides.
       </p>
     </div>
 
@@ -93,7 +87,7 @@ export const DocsContent = () => (
         icon="ri-mic-2-line"
         label="Voice Catalog"
         description="15 voices: American & British, Female & Male"
-        href="https://vocably.onrender.com"
+        href="https://github.com/AbdulGani11/Vocably"
       />
       <NavItem
         icon="ri-server-line"
@@ -102,16 +96,10 @@ export const DocsContent = () => (
         href="https://fastapi.tiangolo.com"
       />
       <NavItem
-        icon="ri-lock-line"
-        label="Authentication"
-        description="python-jose validates every /api/tts request via Bearer token"
-        href="https://jwt.io"
-      />
-      <NavItem
-        icon="ri-layout-line"
-        label="Deployment"
-        description="Docker (python:3.11-slim + espeak-ng) on Hugging Face Spaces"
-        href="https://huggingface.co/spaces"
+        icon="ri-file-text-line"
+        label="File & YouTube Import"
+        description="SRT, VTT, PDF, TXT — or paste a YouTube URL to fetch and clean transcripts"
+        href="https://github.com/AbdulGani11/Vocably"
       />
     </div>
   </div>
