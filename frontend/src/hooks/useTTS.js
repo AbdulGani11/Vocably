@@ -206,7 +206,6 @@ export const useTTS = () => {
 
         } catch (err) {
             if (err.name === "AbortError") return;
-            console.error("TTS Error:", err);
             setError(
                 err.message.includes("Failed to fetch") || err.message.includes("NetworkError")
                     ? "Cannot connect to TTS server. Check that the backend is running."

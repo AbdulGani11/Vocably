@@ -27,6 +27,16 @@ _pipeline = None
 _executor: Optional[concurrent.futures.ThreadPoolExecutor] = None
 _ready = False
 _stream_stop_event: Optional[threading.Event] = None
+_stream_lock = threading.Lock()
+
+_MAX_CLEAN_TEXT = 10_000        # max characters sent to Ollama for cleaning
+_TTS_TIMEOUT = 600.0            # seconds before a TTS request is abandoned
+_STREAM_CHUNK_TIMEOUT = 120.0   # seconds to wait for each streamed audio chunk
+_MIN_SPEED = 0.5                # minimum TTS speed multiplier
+_MAX_SPEED = 2.0                # maximum TTS speed multiplier
+_OLLAMA_CHUNK_SIZE = 3000       # max characters per Ollama chunk when splitting long text
+_SANITY_RATIO = 0.2             # if Ollama output < 20% of input length, fall back to regex
+_SANITY_MIN_CHARS = 50          # minimum character count for Ollama output before falling back
 
 class TTSRequest(BaseModel):
     text: str
@@ -129,7 +139,7 @@ _CLEAN_SYSTEM_PROMPT = (
     "Clean the given text strictly by these rules:\n"
     "1. Remove all timestamps (e.g. [00:12], (1:23), HH:MM:SS patterns).\n"
     "2. Remove speaker labels (e.g. 'Speaker 1:', 'John:', '[SPEAKER_01]:').\n"
-    "3. Remove filler words: um, uh, like, you know, I mean, basically, literally, right, so yeah.\n"
+    "3. Remove filler words: um, uh, you know, I mean, basically, literally, so yeah.\n"
     "4. Fix punctuation: add missing periods, capitalize sentence starts.\n"
     "5. Merge fragmented lines into smooth flowing paragraphs.\n"
     "Output ONLY the cleaned text. No explanations, no preamble, no extra commentary."
@@ -211,11 +221,11 @@ async def generate_speech(request: TTSRequest):
     text = request.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="Text is required")
-    if len(text) > 10000:
+    if len(text) > _MAX_CLEAN_TEXT:
         raise HTTPException(status_code=400, detail="Text too long (max 10000 chars)")
 
     voice = request.voice or "af_heart"
-    speed = max(0.5, min(2.0, request.speed or 1.0))
+    speed = max(_MIN_SPEED, min(_MAX_SPEED, request.speed or 1.0))
 
     logger.info(f"TTS: voice={voice} speed={speed} text='{text[:50]}...'")
 
@@ -223,7 +233,7 @@ async def generate_speech(request: TTSRequest):
     try:
         audio_b64, sample_rate = await asyncio.wait_for(
             loop.run_in_executor(_executor, _generate_sync, text, voice, speed),
-            timeout=600.0,
+            timeout=_TTS_TIMEOUT,
         )
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="TTS generation timed out")
@@ -244,20 +254,20 @@ async def stream_speech(request_data: TTSRequest, http_request: Request):
     text = request_data.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="Text is required")
-    if len(text) > 10000:
+    if len(text) > _MAX_CLEAN_TEXT:
         raise HTTPException(status_code=400, detail="Text too long (max 10000 chars)")
 
     voice = request_data.voice or "af_heart"
-    speed = max(0.5, min(2.0, request_data.speed or 1.0))
+    speed = max(_MIN_SPEED, min(_MAX_SPEED, request_data.speed or 1.0))
 
     logger.info(f"TTS stream: voice={voice} speed={speed} chars={len(text)}")
 
     # Cancel any in-progress stream so the executor thread is freed quickly
-    if _stream_stop_event is not None:
-        _stream_stop_event.set()
-
-    stop_event = threading.Event()
-    _stream_stop_event = stop_event
+    with _stream_lock:
+        if _stream_stop_event is not None:
+            _stream_stop_event.set()
+        stop_event = threading.Event()
+        _stream_stop_event = stop_event
 
     loop = asyncio.get_running_loop()
     audio_queue: asyncio.Queue = asyncio.Queue()
@@ -282,7 +292,7 @@ async def stream_speech(request_data: TTSRequest, http_request: Request):
     async def _response_gen():
         while True:
             try:
-                chunk = await asyncio.wait_for(audio_queue.get(), timeout=120.0)
+                chunk = await asyncio.wait_for(audio_queue.get(), timeout=_STREAM_CHUNK_TIMEOUT)
             except asyncio.TimeoutError:
                 logger.warning("TTS stream: timeout waiting for chunk")
                 break
@@ -336,7 +346,7 @@ async def _ollama_clean(text: str, prompt: str = _CLEAN_SYSTEM_PROMPT) -> tuple[
             response.raise_for_status()
             data = response.json()
             cleaned = _regex_clean(data["message"]["content"])
-            if len(cleaned) < max(50, len(text) * 0.2):
+            if len(cleaned) < max(_SANITY_MIN_CHARS, len(text) * _SANITY_RATIO):
                 logger.warning(
                     f"Ollama output too short ({len(cleaned)} vs {len(text)} chars) "
                     "— falling back to regex-only clean"
@@ -367,7 +377,7 @@ def _split_into_chunks(text: str, chunk_size: int) -> list[str]:
     return chunks
 
 
-async def _ollama_clean_long(text: str, prompt: str = _CLEAN_SYSTEM_PROMPT, chunk_size: int = 3000) -> tuple[str, bool]:
+async def _ollama_clean_long(text: str, prompt: str = _CLEAN_SYSTEM_PROMPT, chunk_size: int = _OLLAMA_CHUNK_SIZE) -> tuple[str, bool]:
     """Process long text by splitting into sentence-boundary chunks to avoid timeouts."""
     if len(text) <= chunk_size:
         return await _ollama_clean(text, prompt)
@@ -474,7 +484,7 @@ async def extract_pdf(file: UploadFile = File(...)):
     if not raw_text.strip():
         raise HTTPException(status_code=422, detail="Could not extract any text from this PDF")
 
-    cleaned, available = await _ollama_clean_long(raw_text[:10000])
+    cleaned, available = await _ollama_clean_long(raw_text[:_MAX_CLEAN_TEXT])
     logger.info(f"PDF extracted: {page_count}p via {method}, {len(raw_text)} → {len(cleaned)} chars")
     return PDFResponse(cleaned_text=cleaned, pages=page_count, method=method, available=available)
 
@@ -537,7 +547,7 @@ async def youtube_transcript(request: YouTubeRequest):
 
     logger.info(f"YouTube: {video_id} — {len(raw_text)} chars raw")
 
-    cleaned, available = await _ollama_clean_long(raw_text[:10000], prompt=_CLEAN_SYSTEM_PROMPT)
+    cleaned, available = await _ollama_clean_long(raw_text[:_MAX_CLEAN_TEXT], prompt=_CLEAN_SYSTEM_PROMPT)
 
     logger.info(f"YouTube: cleaned {len(raw_text)} → {len(cleaned)} chars")
 

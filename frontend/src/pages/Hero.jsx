@@ -7,9 +7,10 @@ import {
   SPEED_PRESETS,
   USE_CASES,
 } from "../utils/constants";
-import DropupSelector from "../components/Hero/DropupSelector";
-
-const TTS_BACKEND_URL = import.meta.env.VITE_TTS_BACKEND_URL || "http://localhost:8000";
+import CardHeader from "../components/Hero/CardHeader";
+import TextEditor from "../components/Hero/TextEditor";
+import PlaybackControls from "../components/Hero/PlaybackControls";
+import StatusNotice from "../components/Hero/StatusNotice";
 
 const VOICE_ITEMS = VOICES.map((v) => ({ value: v.value, label: v.label }));
 const SPEED_ITEMS = SPEED_PRESETS.map((s) => ({
@@ -39,175 +40,13 @@ const Hero = () => {
 
   const [selectedUseCase, setSelectedUseCase] = useState(null);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isCleaning, setIsCleaning] = useState(false);
   const [cleanNotice, setCleanNotice] = useState(null);
   const fileInputRef = useRef(null);
-
-  const [showYoutubeInput, setShowYoutubeInput] = useState(false);
-  const [youtubeUrl, setYoutubeUrl] = useState("");
-  const [isFetchingYoutube, setIsFetchingYoutube] = useState(false);
-  const [ytLoadingLabel, setYtLoadingLabel] = useState("Fetching...");
-
-  const ACCEPTED_EXTENSIONS = [".txt", ".md", ".srt", ".vtt", ".pdf"];
-
-  const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = "";
-
-    const ext = "." + file.name.toLowerCase().split(".").pop();
-    if (!ACCEPTED_EXTENSIONS.includes(ext)) {
-      setCleanNotice({
-        type: "warn",
-        message: `"${ext}" is not supported. Accepted: .txt, .md, .srt, .vtt, .pdf`,
-      });
-      return;
-    }
-
-    setIsCleaning(true);
-    setCleanNotice(null);
-    setSelectedUseCase(null);
-
-    const isPDF = file.name.toLowerCase().endsWith(".pdf");
-
-    try {
-      let data;
-
-      if (isPDF) {
-        const formData = new FormData();
-        formData.append("file", file);
-        const response = await fetch(`${TTS_BACKEND_URL}/api/extract-pdf`, {
-          method: "POST",
-          body: formData,
-        });
-        if (!response.ok) {
-          const err = await response.json().catch(() => ({}));
-          throw new Error(err.detail || `Server error: ${response.status}`);
-        }
-        data = await response.json();
-        const methodLabel = data.method === "ocr" ? "OCR" : "digital";
-        const notice = `PDF extracted (${data.pages}p, ${methodLabel})${data.available ? " — cleaned with AI." : " — Ollama unavailable, loaded as-is."}`;
-        setCleanNotice({ type: data.available ? "success" : "warn", message: notice });
-        if (data.available) setTimeout(() => setCleanNotice(null), 4000);
-      } else {
-        const rawText = await file.text();
-        if (!rawText.trim()) {
-          setCleanNotice({ type: "warn", message: "File is empty — nothing to load." });
-          setIsCleaning(false);
-          return;
-        }
-
-        const response = await fetch(`${TTS_BACKEND_URL}/api/clean`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: rawText }),
-        });
-        if (response.ok) {
-          data = await response.json();
-          if (!data.available) {
-            setCleanNotice({ type: "warn", message: "Ollama not running — text loaded as-is. Install Ollama + qwen2.5:0.5b for AI cleanup." });
-          } else {
-            setCleanNotice({ type: "success", message: "Text cleaned with AI." });
-            setTimeout(() => setCleanNotice(null), 3000);
-          }
-        } else {
-          setText(rawText.slice(0, MAX_TEXT_LENGTH));
-          setCleanNotice({ type: "warn", message: "Cleanup unavailable — text loaded as-is." });
-          setIsCleaning(false);
-          return;
-        }
-      }
-
-      setText(data.cleaned_text.slice(0, MAX_TEXT_LENGTH));
-    } catch (err) {
-      setCleanNotice({ type: "warn", message: err.message || "Upload failed — please try again." });
-    } finally {
-      setIsCleaning(false);
-    }
-  };
-
-  const handleYoutubeTranscript = async (e) => {
-    e.preventDefault();
-    if (!youtubeUrl.trim()) return;
-
-    setIsFetchingYoutube(true);
-    setYtLoadingLabel("Fetching...");
-    setCleanNotice(null);
-    setSelectedUseCase(null);
-    const ytLabelTimer = setTimeout(() => setYtLoadingLabel("Cleaning with AI..."), 4000);
-
-    try {
-      const response = await fetch(`${TTS_BACKEND_URL}/api/youtube-transcript`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: youtubeUrl.trim() }),
-      });
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.detail || `Server error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setText(data.cleaned_text.slice(0, MAX_TEXT_LENGTH));
-      setShowYoutubeInput(false);
-      setYoutubeUrl("");
-
-      const isAvailable = data.available;
-      const notice = isAvailable
-        ? "YouTube transcript fetched and cleaned with AI."
-        : "YouTube transcript fetched — Ollama unavailable, loaded as-is.";
-      setCleanNotice({ type: isAvailable ? "success" : "warn", message: notice });
-      if (isAvailable) setTimeout(() => setCleanNotice(null), 4000);
-    } catch (err) {
-      setCleanNotice({ type: "warn", message: err.message || "Failed to fetch transcript." });
-    } finally {
-      clearTimeout(ytLabelTimer);
-      setIsFetchingYoutube(false);
-    }
-  };
 
   const handleSelectUseCase = (useCase) => {
     setText(useCase.text);
     setSelectedUseCase(useCase.id);
   };
-
-  const getPlayButtonClasses = () => {
-    const base = "flex h-11 w-11 md:h-12 md:w-12 items-center justify-center rounded-full text-white shadow-xl transition-all active:scale-95";
-    if (isLoading || !backendReady) {
-      return `${base} bg-neutral-400 cursor-wait`;
-    } else if (isSpeaking) {
-      return `${base} bg-red-500 hover:bg-red-600`;
-    } else {
-      return `${base} bg-neutral-900 hover:scale-105 hover:bg-black`;
-    }
-  };
-
-  const getPlayButtonLabel = () => {
-    if (isLoading) {
-      return "Generating speech...";
-    } else if (!backendReady) {
-      if (backendStatus === "offline") {
-        return "Backend offline — start the server";
-      } else {
-        return "Backend warming up, please wait";
-      }
-    } else if (isSpeaking) {
-      return "Stop speaking";
-    } else {
-      return "Play text as speech";
-    }
-  };
-
-  const charCountColor = text.length > WARNING_THRESHOLD ? "text-red-500" : "text-neutral-400";
-
-  const noticeClasses = cleanNotice?.type === "success"
-    ? "bg-green-50 border border-green-200 text-green-700"
-    : "bg-amber-50 border border-amber-200 text-amber-700";
-
-  const noticeIcon = cleanNotice?.type === "success"
-    ? "ri-checkbox-circle-line"
-    : "ri-information-line";
 
   return (
     <section className="relative flex flex-col items-center justify-center w-full min-h-full max-w-5xl mx-auto px-6 pt-28 md:pt-20 pb-8 md:pb-4">
@@ -245,183 +84,39 @@ const Hero = () => {
         >
           <div className="relative mx-auto w-full overflow-hidden rounded-2xl bg-white shadow-2xl shadow-orange-900/10 border border-white/60">
             <div className="p-6">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".txt,.md,.srt,.vtt,.pdf"
-                className="hidden"
-                onChange={handleFileUpload}
+              <CardHeader
+                onTextLoaded={(t) => { setText(t); setSelectedUseCase(null); }}
+                onNotice={setCleanNotice}
+                isLoading={isLoading}
+                fileInputRef={fileInputRef}
+                isExpanded={isExpanded}
+                onToggleExpand={() => setIsExpanded((v) => !v)}
+                MAX_TEXT_LENGTH={MAX_TEXT_LENGTH}
               />
 
-              <div className="mb-5 md:mb-4 flex items-center justify-between gap-3">
-                {showYoutubeInput ? (
-                  <form
-                    onSubmit={handleYoutubeTranscript}
-                    className="flex items-center gap-2 flex-1 min-w-0"
-                  >
-                    <i className="ri-youtube-line text-red-500 text-xs shrink-0"></i>
-                    <input
-                      type="url"
-                      value={youtubeUrl}
-                      onChange={(e) => setYoutubeUrl(e.target.value)}
-                      placeholder="Paste YouTube URL..."
-                      className="flex-1 min-w-0 text-xs border-b border-neutral-200 focus:border-neutral-500 outline-none bg-transparent py-0.5 text-neutral-700 placeholder:text-neutral-300 transition-colors"
-                      autoFocus
-                      disabled={isFetchingYoutube}
-                    />
-                    <button
-                      type="submit"
-                      disabled={isFetchingYoutube || !youtubeUrl.trim()}
-                      className="flex items-center gap-1 text-[10px] md:text-xs text-neutral-400 hover:text-neutral-700 disabled:opacity-40 transition-colors shrink-0"
-                      aria-label="Fetch transcript"
-                    >
-                      {isFetchingYoutube ? (
-                        <>
-                          <i className="ri-loader-4-line animate-spin"></i>
-                          <span className="hidden sm:inline">{ytLoadingLabel}</span>
-                        </>
-                      ) : (
-                        <i className="ri-arrow-right-line"></i>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setShowYoutubeInput(false); setYoutubeUrl(""); }}
-                      className="text-[10px] md:text-xs text-neutral-400 hover:text-neutral-600 transition-colors shrink-0"
-                      aria-label="Cancel"
-                    >
-                      <i className="ri-close-line"></i>
-                    </button>
-                  </form>
-                ) : (
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isCleaning}
-                      className="flex items-center gap-1.5 text-[10px] md:text-xs font-medium text-neutral-400 hover:text-neutral-600 transition-colors disabled:cursor-wait"
-                      aria-label="Upload text file and clean with AI"
-                    >
-                      {isCleaning ? (
-                        <i className="ri-loader-4-line animate-spin"></i>
-                      ) : (
-                        <i className="ri-upload-2-line"></i>
-                      )}
-                      <span className="hidden sm:inline">
-                        {isCleaning ? "Cleaning..." : "Upload & Clean"}
-                      </span>
-                    </button>
+              <TextEditor
+                text={text}
+                onTextChange={(t) => { setText(t); setSelectedUseCase(null); }}
+                isExpanded={isExpanded}
+                MAX_TEXT_LENGTH={MAX_TEXT_LENGTH}
+                WARNING_THRESHOLD={WARNING_THRESHOLD}
+              />
 
-                    <span className="w-px h-3 bg-neutral-200 shrink-0"></span>
-
-                    <button
-                      onClick={() => { setShowYoutubeInput(true); setCleanNotice(null); }}
-                      className="flex items-center gap-1.5 text-[10px] md:text-xs font-medium text-neutral-400 hover:text-red-500 transition-colors"
-                      aria-label="Fetch transcript from YouTube URL"
-                    >
-                      <i className="ri-youtube-line"></i>
-                      <span className="hidden sm:inline">YouTube</span>
-                    </button>
-
-                    <div className="relative group/tip">
-                      <i className="ri-information-line text-[10px] md:text-xs text-neutral-300 hover:text-neutral-500 cursor-default transition-colors"></i>
-                      <div className="absolute left-0 top-5 z-50 hidden group-hover/tip:block w-48 rounded-lg bg-neutral-800 px-3 py-2 text-[10px] text-neutral-200 shadow-lg">
-                        <p className="font-medium mb-1 text-white">Import sources</p>
-                        <p className="text-neutral-300">Files: .txt · .md · .srt · .vtt · .pdf</p>
-                        <p className="mt-1 text-neutral-300">YouTube: paste any video URL</p>
-                        <p className="mt-1 text-neutral-400">AI cleans timestamps, fillers &amp; speaker labels.</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {!showYoutubeInput && (
-                  <button
-                    onClick={() => setIsExpanded(!isExpanded)}
-                    className="flex items-center gap-1 text-[10px] md:text-xs font-medium text-neutral-400 hover:text-neutral-600 transition-colors"
-                    title={isExpanded ? "Collapse textarea" : "Expand textarea"}
-                    aria-label={isExpanded ? "Collapse textarea" : "Expand textarea"}
-                  >
-                    <i className={isExpanded ? "ri-collapse-diagonal-line" : "ri-expand-diagonal-line"}></i>
-                    <span className="hidden sm:inline">
-                      {isExpanded ? "Collapse" : "Expand"}
-                    </span>
-                  </button>
-                )}
-              </div>
-
-              <div className="relative group">
-                <textarea
-                  className={`w-full resize-none border-none bg-transparent p-0 text-lg md:text-2xl font-light leading-relaxed text-neutral-800 focus:ring-0 placeholder:text-neutral-300 transition-all duration-300 ${
-                    isExpanded ? "h-64 md:h-80" : "h-40 md:h-32"
-                  }`}
-                  placeholder="Type something here to hear it spoken..."
-                  value={text}
-                  onChange={(e) =>
-                    setText(e.target.value.slice(0, MAX_TEXT_LENGTH))
-                  }
-                  aria-label="Text to convert to speech"
-                />
-                <div
-                  className={`absolute bottom-1 md:bottom-2 right-0 text-[10px] font-mono transition-colors ${charCountColor}`}
-                >
-                  {text.length}/{MAX_TEXT_LENGTH}
-                </div>
-              </div>
-
-              <div className="mt-6 flex items-center justify-between border-t border-neutral-100 pt-6">
-                <div className="flex items-center gap-2">
-                  <DropupSelector
-                    items={VOICE_ITEMS}
-                    selectedValue={selectedVoice}
-                    onChange={setSelectedVoice}
-                    label="Voice"
-                    triggerIcon="ri-mic-line"
-                  />
-                  <DropupSelector
-                    items={SPEED_ITEMS}
-                    selectedValue={speed}
-                    onChange={setSpeed}
-                    label="Speed"
-                    triggerIcon="ri-equalizer-line"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2 md:gap-3">
-                  <button
-                    onClick={handleDownload}
-                    disabled={!hasAudio}
-                    className={`flex h-11 w-11 md:h-12 md:w-12 items-center justify-center rounded-full transition-all active:scale-95
-                      ${
-                        hasAudio
-                          ? "bg-purple-600 text-white hover:bg-purple-700 shadow-lg"
-                          : "bg-neutral-100 text-neutral-400 cursor-not-allowed"
-                      }`}
-                    title={hasAudio ? "Download audio" : "Generate audio first"}
-                    aria-label={
-                      hasAudio
-                        ? "Download audio file"
-                        : "Download disabled - generate audio first"
-                    }
-                  >
-                    <i className="ri-download-2-line text-lg md:text-xl"></i>
-                  </button>
-
-                  <button
-                    onClick={handlePlay}
-                    disabled={isLoading || !backendReady}
-                    className={getPlayButtonClasses()}
-                    aria-label={getPlayButtonLabel()}
-                  >
-                    {isLoading ? (
-                      <i className="ri-loader-4-line text-xl md:text-2xl animate-spin"></i>
-                    ) : isSpeaking ? (
-                      <i className="ri-stop-fill text-xl md:text-2xl key-active-pop"></i>
-                    ) : (
-                      <i className="ri-play-fill text-xl md:text-2xl ml-1 key-active-pop"></i>
-                    )}
-                  </button>
-                </div>
-              </div>
+              <PlaybackControls
+                isLoading={isLoading}
+                isSpeaking={isSpeaking}
+                backendReady={backendReady}
+                backendStatus={backendStatus}
+                hasAudio={hasAudio}
+                onPlay={handlePlay}
+                onDownload={handleDownload}
+                voice={selectedVoice}
+                onVoiceChange={setSelectedVoice}
+                speed={speed}
+                onSpeedChange={setSpeed}
+                voiceItems={VOICE_ITEMS}
+                speedItems={SPEED_ITEMS}
+              />
 
               {!error && text.length > 4000 && !isSpeaking && (
                 <p className="mt-3 text-[11px] text-neutral-400 text-right">
@@ -437,14 +132,7 @@ const Hero = () => {
                 </div>
               )}
 
-              {cleanNotice && (
-                <div
-                  className={`mt-3 p-2.5 rounded-lg text-xs flex items-center gap-2 ${noticeClasses}`}
-                >
-                  <i className={noticeIcon}></i>
-                  {cleanNotice.message}
-                </div>
-              )}
+              <StatusNotice notice={cleanNotice} />
             </div>
           </div>
         </div>

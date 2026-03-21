@@ -215,4 +215,8 @@
   .example-pill i {
     font-size: 0.875rem;
   }
+
+  .btn-icon-transition {
+    @apply hover:text-neutral-600 transition-colors;
+  }
 }
