@@ -22,7 +22,7 @@ timeout /t 3 /nobreak >nul
 
 REM Start the frontend in a new window
 echo Starting React Frontend...
-start "Vocably Frontend" cmd /k "cd /d %~dp0 && npm run dev"
+start "Vocably Frontend" cmd /k "cd /d %~dp0frontend && npm run dev"
 
 echo.
 echo ============================================================

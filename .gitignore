@@ -35,6 +35,5 @@ Untitled*.md
 # ── Documents folder — ignore all except the main technical reference ─────────
 Documents/*
 !Documents/documentation.md
-!Documents/deployment.md
 !Documents/styles.md
 !Documents/production-gaps.md
