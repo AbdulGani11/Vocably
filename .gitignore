@@ -33,5 +33,6 @@ VOCABLY_GUIDE.md
 Untitled*.md
 
 # ── Local documents and writing — never commit ────────────────────────────────
-Documents/
+Documents/*
+!Documents/documentation.md
 draft.dev/

@@ -492,7 +492,7 @@ async def youtube_transcript(request: YouTubeRequest):
         raise HTTPException(
             status_code=400,
             detail="Could not find a YouTube video ID in that URL. "
-                   "Accepted formats: youtube.com/watch?v=ID, youtu.be/ID, /shorts/ID",
+                   "Accepted formats: youtube.com/watch?v=ID, youtu.be/ID, /shorts/ID, /embed/ID, /live/ID",
         )
 
     try:
