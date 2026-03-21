@@ -99,7 +99,15 @@ Ollama is optional. If it is not running, the parsed text is loaded as-is.
 
 Paste any YouTube URL into the YouTube input in the card header. The backend extracts the video ID, fetches closed-caption data directly from YouTube's servers (no API key required), and runs the same Ollama cleaning pipeline before loading the transcript into the textarea. Works with auto-generated and manual captions.
 
-Supports URL formats: `watch?v=`, `youtu.be/`, `/shorts/`, `/embed/`, `/live/`
+Paste any of these YouTube URL formats and it will work:
+
+| Format | Example |
+|---|---|
+| Standard watch URL | `https://www.youtube.com/watch?v=dQw4w9WgXcQ` |
+| Short URL (`youtu.be` is YouTube's own URL shortener) | `https://youtu.be/dQw4w9WgXcQ` |
+| YouTube Shorts | `https://www.youtube.com/shorts/dQw4w9WgXcQ` |
+| Embedded player URL | `https://www.youtube.com/embed/dQw4w9WgXcQ` |
+| Live stream | `https://www.youtube.com/live/dQw4w9WgXcQ` |
 
 ## Documentation
 
