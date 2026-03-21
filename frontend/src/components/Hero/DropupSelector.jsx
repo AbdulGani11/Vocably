@@ -46,18 +46,18 @@ const DropupSelector = ({ items, selectedValue, onChange, label, triggerIcon }) 
 
       <div className={`dropdown-panel bottom-full mb-2 left-0 w-56 ${dropdownClasses}`}>
         <div className="p-2 max-h-64 overflow-y-auto">
-          {items.map((item) => (
+          {items.map((item) => {
+            const itemClasses = selectedValue === item.value
+              ? "bg-purple-50 text-purple-700"
+              : "text-neutral-700 hover:bg-neutral-50";
+            return (
             <button
               key={item.value}
               onClick={() => {
                 onChange(item.value);
                 setIsOpen(false);
               }}
-              className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors text-sm font-medium flex items-center gap-2 ${
-                selectedValue === item.value
-                  ? "bg-purple-50 text-purple-700"
-                  : "text-neutral-700 hover:bg-neutral-50"
-              }`}
+              className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors text-sm font-medium flex items-center gap-2 ${itemClasses}`}
             >
               {item.icon && <i className={`${item.icon} text-base`}></i>}
               {item.label}
@@ -65,7 +65,8 @@ const DropupSelector = ({ items, selectedValue, onChange, label, triggerIcon }) 
                 <i className="ri-check-line ml-auto text-purple-600"></i>
               )}
             </button>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

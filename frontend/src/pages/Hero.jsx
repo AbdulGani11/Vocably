@@ -153,11 +153,12 @@ const Hero = () => {
       setShowYoutubeInput(false);
       setYoutubeUrl("");
 
-      const notice = data.available
+      const isAvailable = data.available;
+      const notice = isAvailable
         ? "YouTube transcript fetched and cleaned with AI."
         : "YouTube transcript fetched — Ollama unavailable, loaded as-is.";
-      setCleanNotice({ type: data.available ? "success" : "warn", message: notice });
-      if (data.available) setTimeout(() => setCleanNotice(null), 4000);
+      setCleanNotice({ type: isAvailable ? "success" : "warn", message: notice });
+      if (isAvailable) setTimeout(() => setCleanNotice(null), 4000);
     } catch (err) {
       setCleanNotice({ type: "warn", message: err.message || "Failed to fetch transcript." });
     } finally {
@@ -170,6 +171,43 @@ const Hero = () => {
     setText(useCase.text);
     setSelectedUseCase(useCase.id);
   };
+
+  const getPlayButtonClasses = () => {
+    const base = "flex h-11 w-11 md:h-12 md:w-12 items-center justify-center rounded-full text-white shadow-xl transition-all active:scale-95";
+    if (isLoading || !backendReady) {
+      return `${base} bg-neutral-400 cursor-wait`;
+    } else if (isSpeaking) {
+      return `${base} bg-red-500 hover:bg-red-600`;
+    } else {
+      return `${base} bg-neutral-900 hover:scale-105 hover:bg-black`;
+    }
+  };
+
+  const getPlayButtonLabel = () => {
+    if (isLoading) {
+      return "Generating speech...";
+    } else if (!backendReady) {
+      if (backendStatus === "offline") {
+        return "Backend offline — start the server";
+      } else {
+        return "Backend warming up, please wait";
+      }
+    } else if (isSpeaking) {
+      return "Stop speaking";
+    } else {
+      return "Play text as speech";
+    }
+  };
+
+  const charCountColor = text.length > WARNING_THRESHOLD ? "text-red-500" : "text-neutral-400";
+
+  const noticeClasses = cleanNotice?.type === "success"
+    ? "bg-green-50 border border-green-200 text-green-700"
+    : "bg-amber-50 border border-amber-200 text-amber-700";
+
+  const noticeIcon = cleanNotice?.type === "success"
+    ? "ri-checkbox-circle-line"
+    : "ri-information-line";
 
   return (
     <section className="relative flex flex-col items-center justify-center w-full min-h-full max-w-5xl mx-auto px-6 pt-28 md:pt-20 pb-8 md:pb-4">
@@ -324,11 +362,7 @@ const Hero = () => {
                   aria-label="Text to convert to speech"
                 />
                 <div
-                  className={`absolute bottom-1 md:bottom-2 right-0 text-[10px] font-mono transition-colors ${
-                    text.length > WARNING_THRESHOLD
-                      ? "text-red-500"
-                      : "text-neutral-400"
-                  }`}
+                  className={`absolute bottom-1 md:bottom-2 right-0 text-[10px] font-mono transition-colors ${charCountColor}`}
                 >
                   {text.length}/{MAX_TEXT_LENGTH}
                 </div>
@@ -375,25 +409,8 @@ const Hero = () => {
                   <button
                     onClick={handlePlay}
                     disabled={isLoading || !backendReady}
-                    className={`flex h-11 w-11 md:h-12 md:w-12 items-center justify-center rounded-full text-white shadow-xl transition-all active:scale-95
-                      ${
-                        isLoading || !backendReady
-                          ? "bg-neutral-400 cursor-wait"
-                          : isSpeaking
-                            ? "bg-red-500 hover:bg-red-600"
-                            : "bg-neutral-900 hover:scale-105 hover:bg-black"
-                      }`}
-                    aria-label={
-                      isLoading
-                        ? "Generating speech..."
-                        : !backendReady
-                          ? backendStatus === "offline"
-                            ? "Backend offline — start the server"
-                            : "Backend warming up, please wait"
-                          : isSpeaking
-                            ? "Stop speaking"
-                            : "Play text as speech"
-                    }
+                    className={getPlayButtonClasses()}
+                    aria-label={getPlayButtonLabel()}
                   >
                     {isLoading ? (
                       <i className="ri-loader-4-line text-xl md:text-2xl animate-spin"></i>
@@ -422,19 +439,9 @@ const Hero = () => {
 
               {cleanNotice && (
                 <div
-                  className={`mt-3 p-2.5 rounded-lg text-xs flex items-center gap-2 ${
-                    cleanNotice.type === "success"
-                      ? "bg-green-50 border border-green-200 text-green-700"
-                      : "bg-amber-50 border border-amber-200 text-amber-700"
-                  }`}
+                  className={`mt-3 p-2.5 rounded-lg text-xs flex items-center gap-2 ${noticeClasses}`}
                 >
-                  <i
-                    className={
-                      cleanNotice.type === "success"
-                        ? "ri-checkbox-circle-line"
-                        : "ri-information-line"
-                    }
-                  ></i>
+                  <i className={noticeIcon}></i>
                   {cleanNotice.message}
                 </div>
               )}

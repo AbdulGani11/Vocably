@@ -67,6 +67,8 @@ _TIMESTAMP_RE = re.compile(
     re.VERBOSE,
 )
 
+_MIN_DIGITAL_TEXT_CHARS = 50
+
 _SPEAKER_LABEL_RE = re.compile(
     r"^\s*(?:Speaker|SPEAKER)\s+\w+[:\s]\s*",
     re.MULTILINE,
@@ -80,12 +82,13 @@ def _regex_clean(text: str) -> str:
     return text.strip()
 
 _TAG_RE = re.compile(r"<[^>]+>")
+_SRT_HEADER_RE = re.compile(r"^\d+\r?\n\d{1,2}:\d{2}:\d{2},\d{3}\s*-->")
 
 def _detect_format(text: str) -> str:
     stripped = text.strip()
     if stripped.startswith("WEBVTT"):
         return "vtt"
-    if re.match(r"^\d+\r?\n\d{1,2}:\d{2}:\d{2},\d{3}\s*-->", stripped):
+    if _SRT_HEADER_RE.match(stripped):
         return "srt"
     return "text"
 
@@ -111,8 +114,12 @@ def _parse_vtt(text: str) -> str:
 def _parse_srt(text: str) -> str:
     import srt  # noqa: PLC0415
     subs = list(srt.parse(text, ignore_errors=True))
-    parts = [_TAG_RE.sub("", sub.content).strip() for sub in subs]
-    return " ".join(p for p in parts if p)
+    parts = []
+    for sub in subs:
+        cleaned = _TAG_RE.sub("", sub.content).strip()
+        if cleaned:
+            parts.append(cleaned)
+    return " ".join(parts)
 
 _OLLAMA_URL = "http://localhost:11434"
 _OLLAMA_MODEL = "qwen2.5:3b"
@@ -138,18 +145,8 @@ _FILLER_ONLY_PROMPT = (
 )
 
 def _extract_video_id(url: str) -> Optional[str]:
-    patterns = [
-        r"(?:v=)([a-zA-Z0-9_-]{11})",
-        r"(?:youtu\.be/)([a-zA-Z0-9_-]{11})",
-        r"(?:embed/)([a-zA-Z0-9_-]{11})",
-        r"(?:shorts/)([a-zA-Z0-9_-]{11})",
-        r"(?:live/)([a-zA-Z0-9_-]{11})",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, url)
-        if match:
-            return match.group(1)
-    return None
+    match = re.search(r"(?:v=|youtu\.be/|embed/|shorts/|live/)([a-zA-Z0-9_-]{11})", url)
+    return match.group(1) if match else None
 
 def _generate_sync(text: str, voice: str, speed: float) -> tuple[str, int]:
     chunks = []
@@ -350,11 +347,8 @@ async def _ollama_clean(text: str, prompt: str = _CLEAN_SYSTEM_PROMPT) -> tuple[
         return _regex_clean(text), False
 
 
-async def _ollama_clean_long(text: str, prompt: str = _CLEAN_SYSTEM_PROMPT, chunk_size: int = 3000) -> tuple[str, bool]:
-    """Process long text by splitting into sentence-boundary chunks to avoid timeouts."""
-    if len(text) <= chunk_size:
-        return await _ollama_clean(text, prompt)
-
+def _split_into_chunks(text: str, chunk_size: int) -> list[str]:
+    """Split text at sentence boundaries into chunks not exceeding chunk_size."""
     sentences = re.split(r'(?<=[.!?])\s+', text)
     chunks: list[str] = []
     current: list[str] = []
@@ -366,9 +360,19 @@ async def _ollama_clean_long(text: str, prompt: str = _CLEAN_SYSTEM_PROMPT, chun
             current_len = len(sent)
         else:
             current.append(sent)
+            # +1 accounts for the space that " ".join() adds between sentences
             current_len += len(sent) + 1
     if current:
         chunks.append(" ".join(current))
+    return chunks
+
+
+async def _ollama_clean_long(text: str, prompt: str = _CLEAN_SYSTEM_PROMPT, chunk_size: int = 3000) -> tuple[str, bool]:
+    """Process long text by splitting into sentence-boundary chunks to avoid timeouts."""
+    if len(text) <= chunk_size:
+        return await _ollama_clean(text, prompt)
+
+    chunks = _split_into_chunks(text, chunk_size)
 
     parts: list[str] = []
     for chunk in chunks:
@@ -394,15 +398,17 @@ def _extract_pdf(pdf_bytes: bytes) -> tuple[str, int, str]:
 
     pages_text = [page.get_text() for page in doc]
     text = "\n\n".join(pages_text).strip()
-    if len(text) >= 50:
+    if len(text) >= _MIN_DIGITAL_TEXT_CHARS:
         return text, page_count, "digital"
 
-    logger.info("PDF digital extraction yielded < 50 chars — falling back to Tesseract OCR")
+    logger.info(f"PDF digital extraction yielded < {_MIN_DIGITAL_TEXT_CHARS} chars — falling back to Tesseract OCR")
     ocr_parts = []
     for page in doc:
-        pix = page.get_pixmap(dpi=200)
-        img = Image.open(io.BytesIO(pix.tobytes("png")))
-        ocr_parts.append(pytesseract.image_to_string(img))
+        pixmap = page.get_pixmap(dpi=200)
+        png_bytes = pixmap.tobytes("png")
+        image = Image.open(io.BytesIO(png_bytes))
+        ocr_text = pytesseract.image_to_string(image)
+        ocr_parts.append(ocr_text)
     return "\n\n".join(ocr_parts).strip(), page_count, "ocr"
 
 
@@ -519,11 +525,12 @@ async def youtube_transcript(request: YouTubeRequest):
             detail=f"Could not fetch transcript: {str(e)}",
         )
 
-    raw_text = " ".join(
-        s.text.replace("\n", " ").strip()
-        for s in result
-        if s.text.strip()
-    )
+    segments = []
+    for s in result:
+        segment_text = s.text.replace("\n", " ").strip()
+        if segment_text:
+            segments.append(segment_text)
+    raw_text = " ".join(segments)
 
     if not raw_text.strip():
         raise HTTPException(status_code=422, detail="Transcript appears to be empty.")

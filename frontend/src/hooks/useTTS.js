@@ -7,16 +7,30 @@ function buildWav(pcmFloat32, sampleRate = 24000) {
     const n = pcmFloat32.length;
     const buf = new ArrayBuffer(44 + n * 2);
     const v = new DataView(buf);
-    const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
-    w(0, "RIFF"); v.setUint32(4, 36 + n * 2, true);
-    w(8, "WAVE"); w(12, "fmt ");
+    const writeString = (offset, str) => {
+        for (let i = 0; i < str.length; i++) v.setUint8(offset + i, str.charCodeAt(i));
+    };
+
+    // RIFF chunk descriptor
+    writeString(0, "RIFF"); v.setUint32(4, 36 + n * 2, true);
+    writeString(8, "WAVE");
+
+    // fmt sub-chunk (PCM format)
+    writeString(12, "fmt ");
     v.setUint32(16, 16, true); v.setUint16(20, 1, true);  // PCM
     v.setUint16(22, 1, true);  v.setUint32(24, sampleRate, true);
     v.setUint32(28, sampleRate * 2, true); v.setUint16(32, 2, true);
-    v.setUint16(34, 16, true); w(36, "data"); v.setUint32(40, n * 2, true);
+    v.setUint16(34, 16, true);
+
+    // data sub-chunk
+    writeString(36, "data"); v.setUint32(40, n * 2, true);
+
+    // 16-bit PCM: negative samples scale to -32768, positive to 32767
+    const NEG_SCALE = 0x8000;
+    const POS_SCALE = 0x7FFF;
     for (let i = 0; i < n; i++) {
         const s = Math.max(-1, Math.min(1, pcmFloat32[i]));
-        v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+        v.setInt16(44 + i * 2, s < 0 ? s * NEG_SCALE : s * POS_SCALE, true);
     }
     return new Blob([buf], { type: "audio/wav" });
 }
@@ -170,7 +184,7 @@ export const useTTS = () => {
 
             // All server chunks received — build download blob immediately
             if (collectedPCMRef.current.length > 0 && sessionIdRef.current === sessionId) {
-                const total = collectedPCMRef.current.reduce((s, a) => s + a.length, 0);
+                const total = collectedPCMRef.current.reduce((totalLength, chunk) => totalLength + chunk.length, 0);
                 const combined = new Float32Array(total);
                 let offset = 0;
                 for (const chunk of collectedPCMRef.current) {
